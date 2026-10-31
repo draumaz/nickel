@@ -1,5 +1,6 @@
 package io.github.draumaz.nickel.data
 
+import java.math.BigDecimal
 import java.text.NumberFormat
 import java.util.Currency
 import java.util.Locale
@@ -22,32 +23,19 @@ object Money {
         else -> format(0)
     }
 
-    /** Parses keypad input such as `12.5` into cents. */
-    fun parseInput(input: String): Long {
-        if (input.isEmpty() || input == ".") return 0
-        val parts = input.split('.')
-        val whole = parts[0].ifEmpty { "0" }.toLong()
-        val frac = parts.getOrNull(1).orEmpty().padEnd(2, '0').take(2).toLong()
-        return whole * 100 + frac
-    }
+    /**
+     * Keypad input is a string of digits that fill in from the cents up, like a cash
+     * register: `449` is 4.49 and `18945528` is 189,455.28.
+     */
+    fun parseInput(input: String): Long = input.toLongOrNull() ?: 0
 
-    /** The inverse of [parseInput], trimming a zero fraction: 1250 -> `12.5`. */
-    fun toInput(cents: Long): String {
-        val whole = cents / 100
-        val frac = cents % 100
-        return when {
-            frac == 0L -> whole.toString()
-            frac % 10 == 0L -> "$whole.${frac / 10}"
-            else -> "$whole.${frac.toString().padStart(2, '0')}"
-        }
-    }
+    /** The inverse of [parseInput]: 1250 -> `1250`, and zero is empty input. */
+    fun toInput(cents: Long): String = if (cents == 0L) "" else cents.toString()
 
-    /** Renders keypad input with grouping separators, keeping what the user typed. */
-    fun displayInput(input: String): String {
-        if (input.isEmpty()) return "0"
-        val parts = input.split('.')
-        val whole = parts[0].ifEmpty { "0" }.toLong()
-        val grouped = NumberFormat.getIntegerInstance(Locale.getDefault()).format(whole)
-        return if (input.contains('.')) "$grouped.${parts.getOrElse(1) { "" }}" else grouped
-    }
+    /** Renders keypad input with grouping and two decimals, e.g. `1,894.55`. */
+    fun displayInput(input: String): String =
+        NumberFormat.getNumberInstance(Locale.getDefault()).apply {
+            minimumFractionDigits = 2
+            maximumFractionDigits = 2
+        }.format(BigDecimal.valueOf(parseInput(input), 2))
 }

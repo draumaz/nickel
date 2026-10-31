@@ -1,9 +1,12 @@
 package io.github.draumaz.nickel.ui
 
+import android.text.format.DateFormat
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -29,6 +32,7 @@ import androidx.compose.material.icons.automirrored.rounded.TrendingUp
 import androidx.compose.material.icons.rounded.CalendarToday
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.DeleteOutline
+import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ButtonGroupDefaults
@@ -47,9 +51,12 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.material3.TimePicker
+import androidx.compose.material3.TimePickerDialog
 import androidx.compose.material3.ToggleButton
 import androidx.compose.material3.ToggleButtonDefaults
 import androidx.compose.material3.rememberDatePickerState
+import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -57,6 +64,7 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -64,8 +72,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
@@ -73,6 +84,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import io.github.draumaz.nickel.data.Categories
 import io.github.draumaz.nickel.data.Category
@@ -84,12 +96,17 @@ import io.github.draumaz.nickel.ui.components.PoppingText
 import io.github.draumaz.nickel.ui.components.onToneContainer
 import io.github.draumaz.nickel.ui.components.toneContainer
 import io.github.draumaz.nickel.ui.theme.NickelTheme
-import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.LocalDate
+import java.time.LocalTime
 import java.time.ZoneId
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
+import kotlin.math.abs
+import kotlin.math.exp
+import kotlin.math.sign
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -124,24 +141,72 @@ fun EntrySheet(
     }
 }
 
-private const val MAX_WHOLE_DIGITS = 9
+/** Up to 999,999,999.99, the same cap as before. */
+private const val MAX_DIGITS = 11
 
-private fun applyKey(input: String, key: Char): String = when (key) {
-    '<' -> input.dropLast(1)
-    '.' -> when {
-        input.contains('.') -> input
-        input.isEmpty() -> "0."
-        else -> "$input."
+// Digits fill in from the cents up, so there's no decimal point to type.
+private fun applyKey(input: String, key: Char): String {
+    if (key == '<') return input.dropLast(1)
+    val digits = if (key == DOUBLE_ZERO) "00" else key.toString()
+    return when {
+        input.isEmpty() && digits.all { it == '0' } -> input // no leading zeros
+        input.length + digits.length > MAX_DIGITS -> input
+        else -> input + digits
     }
-    else -> {
-        val dot = input.indexOf('.')
-        when {
-            dot >= 0 && input.length - dot > 2 -> input // two decimals max
-            dot < 0 && input.length >= MAX_WHOLE_DIGITS -> input
-            input == "0" -> key.toString()
-            else -> input + key
+}
+
+/**
+ * Swiping across the keypad flips between expense and income, following the switch
+ * above it: swiping toward the start selects the trailing option, like turning a page.
+ * The keypad follows the finger with some resistance and springs back on release; a
+ * swipe toward the option already selected only stretches a little.
+ */
+@Composable
+private fun Modifier.kindSwipe(kind: Kind, onSelect: (Kind) -> Unit): Modifier {
+    val haptics = LocalHapticFeedback.current
+    val layoutDirection = LocalLayoutDirection.current
+    val scope = rememberCoroutineScope()
+    val springBack = MaterialTheme.motionScheme.defaultSpatialSpec<Float>()
+    val offset = remember { Animatable(0f) }
+    val currentKind by rememberUpdatedState(kind)
+    val currentOnSelect by rememberUpdatedState(onSelect)
+
+    return pointerInput(layoutDirection) {
+        val threshold = 48.dp.toPx()
+        val reach = 96.dp.toPx()
+        var total = 0f
+        var armed = false
+
+        // A drag toward the start edge reveals the trailing option.
+        fun target(): Kind {
+            val towardStart = if (layoutDirection == LayoutDirection.Ltr) total < 0 else total > 0
+            return if (towardStart) Kind.INCOME else Kind.EXPENSE
         }
-    }
+
+        fun release() {
+            if (armed) currentOnSelect(target())
+            armed = false
+            scope.launch { offset.animateTo(0f, springBack) }
+        }
+
+        detectHorizontalDragGestures(
+            onDragStart = { total = 0f },
+            onDragEnd = ::release,
+            onDragCancel = ::release,
+        ) { change, dragAmount ->
+            change.consume()
+            total += dragAmount
+            val canSwitch = target() != currentKind
+            // Ease out toward a limit, much shorter when there's nothing to switch to.
+            val limit = if (canSwitch) reach else reach / 4
+            val eased = sign(total) * limit * (1 - exp(-abs(total) / limit))
+            scope.launch { offset.snapTo(eased) }
+
+            val nowArmed = canSwitch && abs(total) >= threshold
+            if (nowArmed && !armed) haptics.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
+            armed = nowArmed
+        }
+    }.graphicsLayer { translationX = offset.value }
 }
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class, ExperimentalMaterial3Api::class)
@@ -162,6 +227,7 @@ private fun EntryContent(
     var note by rememberSaveable { mutableStateOf(editing?.note ?: "") }
     var timestamp by rememberSaveable { mutableLongStateOf(editing?.timestamp ?: System.currentTimeMillis()) }
     var showDatePicker by remember { mutableStateOf(false) }
+    var showTimePicker by remember { mutableStateOf(false) }
 
     val cents = Money.parseInput(input)
     val money = NickelTheme.money
@@ -174,6 +240,13 @@ private fun EntryContent(
         MaterialTheme.motionScheme.defaultEffectsSpec(),
         label = "amountColor",
     )
+
+    fun selectKind(k: Kind) {
+        if (kind == k) return
+        haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+        kind = k
+        if (category.kind != k) category = Categories.forKind(k, customCategories).first()
+    }
 
     Column(
         Modifier
@@ -192,13 +265,7 @@ private fun EntryContent(
                 val checked = kind == k
                 ToggleButton(
                     checked = checked,
-                    onCheckedChange = {
-                        if (kind != k) {
-                            haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
-                            kind = k
-                            if (category.kind != k) category = Categories.forKind(k, customCategories).first()
-                        }
-                    },
+                    onCheckedChange = { selectKind(k) },
                     modifier = Modifier
                         .weight(1f)
                         .semantics { role = Role.RadioButton },
@@ -264,7 +331,7 @@ private fun EntryContent(
 
         Spacer(Modifier.height(12.dp))
 
-        // Note + date.
+        // Note, date and time.
         Row(
             Modifier
                 .fillMaxWidth()
@@ -294,12 +361,22 @@ private fun EntryContent(
             FilledTonalButton(
                 onClick = { showDatePicker = true },
                 shapes = ButtonDefaults.shapes(),
-                contentPadding = PaddingValues(horizontal = 16.dp),
+                contentPadding = PaddingValues(horizontal = 14.dp),
                 modifier = Modifier.height(56.dp),
             ) {
                 Icon(Icons.Rounded.CalendarToday, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
                 Text(dayLabel(timestamp), maxLines = 1)
+            }
+            FilledTonalButton(
+                onClick = { showTimePicker = true },
+                shapes = ButtonDefaults.shapes(),
+                contentPadding = PaddingValues(horizontal = 14.dp),
+                modifier = Modifier.height(56.dp),
+            ) {
+                Icon(Icons.Rounded.Schedule, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text(timeLabel(timestamp), maxLines = 1)
             }
         }
 
@@ -318,7 +395,9 @@ private fun EntryContent(
                 haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                 input = ""
             },
-            modifier = Modifier.padding(horizontal = 20.dp),
+            modifier = Modifier
+                .padding(horizontal = 20.dp)
+                .kindSwipe(kind, ::selectKind),
         )
 
         Spacer(Modifier.height(16.dp))
@@ -404,7 +483,37 @@ private fun EntryContent(
             DatePicker(state = pickerState)
         }
     }
+
+    if (showTimePicker) {
+        val zone = ZoneId.systemDefault()
+        val dateTime = Instant.ofEpochMilli(timestamp).atZone(zone)
+        val pickerState = rememberTimePickerState(
+            initialHour = dateTime.hour,
+            initialMinute = dateTime.minute,
+            is24Hour = DateFormat.is24HourFormat(LocalContext.current),
+        )
+        TimePickerDialog(
+            onDismissRequest = { showTimePicker = false },
+            title = { Text("Time") },
+            confirmButton = {
+                TextButton(onClick = {
+                    timestamp = dateTime
+                        .with(LocalTime.of(pickerState.hour, pickerState.minute))
+                        .toInstant()
+                        .toEpochMilli()
+                    showTimePicker = false
+                }) { Text("OK") }
+            },
+            dismissButton = { TextButton(onClick = { showTimePicker = false }) { Text("Cancel") } },
+        ) {
+            TimePicker(state = pickerState)
+        }
+    }
 }
+
+private fun timeLabel(timestamp: Long): String =
+    Instant.ofEpochMilli(timestamp).atZone(ZoneId.systemDefault()).toLocalTime()
+        .format(DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT))
 
 private fun dayLabel(timestamp: Long): String {
     val zone = ZoneId.systemDefault()

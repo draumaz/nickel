@@ -37,10 +37,13 @@ private val rows = listOf(
     listOf('1', '2', '3'),
     listOf('4', '5', '6'),
     listOf('7', '8', '9'),
-    listOf('.', '0', '<'),
+    listOf(DOUBLE_ZERO, '0', '<'),
 )
 
-/** A calculator-style number pad. `<` is backspace; long-pressing it clears. */
+/** The key that types two zeros at once, for whole amounts. */
+const val DOUBLE_ZERO = 'Z'
+
+/** A cash-register number pad. `<` is backspace; long-pressing it clears. */
 @Composable
 fun Keypad(
     onKey: (Char) -> Unit,
@@ -61,7 +64,7 @@ fun Keypad(
                         else MaterialTheme.colorScheme.onSurface,
                         description = when (key) {
                             '<' -> "Backspace"
-                            '.' -> "Decimal point"
+                            DOUBLE_ZERO -> "Double zero"
                             else -> key.toString()
                         },
                         modifier = Modifier.weight(1f),
@@ -69,7 +72,7 @@ fun Keypad(
                         if (isBackspace) {
                             Icon(Icons.AutoMirrored.Rounded.Backspace, contentDescription = null)
                         } else {
-                            Text(key.toString(), style = MaterialTheme.typography.headlineSmall)
+                            Text(if (key == DOUBLE_ZERO) "00" else key.toString(), style = MaterialTheme.typography.headlineSmall)
                         }
                     }
                 }
