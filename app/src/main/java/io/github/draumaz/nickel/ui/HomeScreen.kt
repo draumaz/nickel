@@ -1,6 +1,7 @@
 package io.github.draumaz.nickel.ui
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
@@ -47,8 +48,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.TrendingDown
 import androidx.compose.material.icons.automirrored.rounded.TrendingUp
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.CalendarMonth
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.DeleteOutline
+import androidx.compose.material.icons.rounded.History
+import androidx.compose.material.icons.rounded.PieChart
 import androidx.compose.material.icons.rounded.Savings
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.ButtonGroupDefaults
@@ -127,6 +131,7 @@ import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
@@ -244,11 +249,7 @@ fun HomeScreen(viewModel: NickelViewModel, onOpenSettings: () -> Unit) {
             ) {
                 item(key = "header", contentType = "header") { Header(onOpenSettings) }
                 item(key = "hero", contentType = "hero") {
-                    HeroCard(
-                        netCents = state.totals.netCents,
-                        incomeCents = state.totals.incomeCents,
-                        expenseCents = state.totals.expenseCents,
-                    )
+                    HeroCard(state.totals, state.summary)
                 }
                 item(key = "filter", contentType = "filter") {
                     Column {
@@ -498,13 +499,14 @@ private fun CoinMark() {
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-private fun HeroCard(netCents: Long, incomeCents: Long, expenseCents: Long) {
+private fun HeroCard(totals: Totals, summary: FilterSummary?) {
     val money = NickelTheme.money
     val pulse = remember { Animatable(1f) }
     var first by remember { mutableStateOf(true) }
     val spatial = MaterialTheme.motionScheme.fastSpatialSpec<Float>()
     val bouncy = MaterialTheme.motionScheme.defaultSpatialSpec<Float>()
-    LaunchedEffect(netCents) {
+    val headlineCents = summary?.totalCents ?: totals.netCents
+    LaunchedEffect(headlineCents) {
         if (first) { first = false; return@LaunchedEffect }
         pulse.animateTo(1.035f, spatial)
         pulse.animateTo(1f, bouncy)
@@ -548,35 +550,80 @@ private fun HeroCard(netCents: Long, incomeCents: Long, expenseCents: Long) {
                     )
             )
             Column(Modifier.padding(24.dp)) {
-                Text(
-                    "Net total",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f),
-                )
+                val title = when {
+                    summary == null -> "Net total"
+                    summary.category != null && summary.kind == Kind.INCOME -> "Income from ${summary.category.label}"
+                    summary.category != null -> "Spent on ${summary.category.label}"
+                    summary.kind == Kind.INCOME -> "Total income"
+                    else -> "Total spent"
+                }
+                Crossfade(title, animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec(), label = "heroTitle") {
+                    Text(
+                        it,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
                 Spacer(Modifier.height(4.dp))
                 RollingText(
-                    text = Money.formatSigned(netCents),
+                    text = if (summary == null) Money.formatSigned(totals.netCents) else Money.format(summary.totalCents),
                     style = MaterialTheme.typography.displayMediumEmphasized,
                     color = MaterialTheme.colorScheme.onPrimaryContainer,
                 )
                 Spacer(Modifier.height(20.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    StatPill(
-                        icon = Icons.AutoMirrored.Rounded.TrendingUp,
-                        label = "In",
-                        value = Money.format(incomeCents),
-                        container = money.incomeContainer,
-                        content = money.onIncomeContainer,
-                        modifier = Modifier.weight(1f),
-                    )
-                    StatPill(
-                        icon = Icons.AutoMirrored.Rounded.TrendingDown,
-                        label = "Out",
-                        value = Money.format(expenseCents),
-                        container = money.expenseContainer,
-                        content = money.onExpenseContainer,
-                        modifier = Modifier.weight(1f),
-                    )
+                    if (summary == null) {
+                        StatPill(
+                            icon = Icons.AutoMirrored.Rounded.TrendingUp,
+                            label = "In",
+                            value = Money.format(totals.incomeCents),
+                            container = money.incomeContainer,
+                            content = money.onIncomeContainer,
+                            modifier = Modifier.weight(1f),
+                        )
+                        StatPill(
+                            icon = Icons.AutoMirrored.Rounded.TrendingDown,
+                            label = "Out",
+                            value = Money.format(totals.expenseCents),
+                            container = money.expenseContainer,
+                            content = money.onExpenseContainer,
+                            modifier = Modifier.weight(1f),
+                        )
+                    } else {
+                        val income = summary.kind == Kind.INCOME
+                        val container = if (income) money.incomeContainer else money.expenseContainer
+                        val content = if (income) money.onIncomeContainer else money.onExpenseContainer
+                        StatPill(
+                            icon = Icons.Rounded.CalendarMonth,
+                            label = "This month",
+                            value = Money.format(summary.thisMonthCents),
+                            container = container,
+                            content = content,
+                            modifier = Modifier.weight(1f),
+                        )
+                        // Within a category, how much of the whole it makes up says more than last month.
+                        if (summary.share != null) {
+                            StatPill(
+                                icon = Icons.Rounded.PieChart,
+                                label = if (income) "Of income" else "Of spending",
+                                value = "${(summary.share * 100).roundToInt()}%",
+                                container = container,
+                                content = content,
+                                modifier = Modifier.weight(1f),
+                            )
+                        } else {
+                            StatPill(
+                                icon = Icons.Rounded.History,
+                                label = "Last month",
+                                value = Money.format(summary.lastMonthCents),
+                                container = container,
+                                content = content,
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                    }
                 }
             }
         }

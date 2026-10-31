@@ -67,6 +67,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
@@ -84,15 +85,16 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.draumaz.nickel.R
 import io.github.draumaz.nickel.data.ImportPlan
 import io.github.draumaz.nickel.data.Kind
+import io.github.draumaz.nickel.export.ExportShare
 import io.github.draumaz.nickel.ui.components.CategoryBadge
 import io.github.draumaz.nickel.ui.components.ScreenHeader
 import io.github.draumaz.nickel.ui.components.pressScale
 import io.github.draumaz.nickel.ui.components.segmentShape
-import kotlinx.coroutines.CancellationException
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import kotlinx.coroutines.CancellationException
 
 @Composable
 fun SettingsScreen(viewModel: NickelViewModel, onBack: () -> Unit) {
@@ -112,8 +114,9 @@ fun SettingsScreen(viewModel: NickelViewModel, onBack: () -> Unit) {
     val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let(viewModel::prepareImport)
     }
-    val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
-        uri?.let(viewModel::export)
+    val context = LocalContext.current
+    LaunchedEffect(Unit) {
+        viewModel.shareExports.collect { ExportShare.share(context, it) }
     }
 
     // Predictive back: the page shrinks and rounds off as the gesture progresses.
@@ -199,12 +202,12 @@ fun SettingsScreen(viewModel: NickelViewModel, onBack: () -> Unit) {
                 title = "Export to CSV",
                 subtitle = when (state.count) {
                     0 -> "Nothing to export yet"
-                    1 -> "Save your 1 transaction as a CSV file"
-                    else -> "Save all ${state.count} transactions as a CSV file"
+                    1 -> "Share or save your 1 transaction as a CSV file"
+                    else -> "Share or save all ${state.count} transactions as a CSV file"
                 },
                 shape = segmentShape(1, 2),
                 enabled = state.count > 0,
-                onClick = { exportLauncher.launch("nickel-${LocalDate.now()}.csv") },
+                onClick = viewModel::export,
             )
 
             Footer()

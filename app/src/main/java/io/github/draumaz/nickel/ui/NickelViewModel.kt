@@ -16,6 +16,7 @@ import io.github.draumaz.nickel.data.Settings
 import io.github.draumaz.nickel.data.SettingsRepository
 import io.github.draumaz.nickel.data.Transaction
 import io.github.draumaz.nickel.data.TransactionRepository
+import io.github.draumaz.nickel.export.ExportShare
 import io.github.draumaz.nickel.widget.NickelWidget
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -33,10 +34,27 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
+import java.time.Instant
+import java.time.LocalDate
+import java.time.YearMonth
+import java.time.ZoneId
 
 enum class Filter { ALL, INCOME, EXPENSE }
 
 data class Totals(val netCents: Long, val incomeCents: Long, val expenseCents: Long)
+
+/** Figures for the banner while the list is narrowed to one kind, or one category of it. */
+data class FilterSummary(
+    val kind: Kind,
+    /** The category being filtered to, or `null` for every category of [kind]. */
+    val category: Category?,
+    val totalCents: Long,
+    val thisMonthCents: Long,
+    val lastMonthCents: Long,
+    /** [category]'s share of everything of [kind], from 0 to 1; `null` without a category. */
+    val share: Float?,
+)
 
 data class HomeState(
     val loading: Boolean = true,
@@ -48,6 +66,8 @@ data class HomeState(
     val filterCategories: List<Category> = emptyList(),
     /** Id of the category being filtered to, if any. */
     val categoryFilter: String? = null,
+    /** `null` while showing everything. */
+    val summary: FilterSummary? = null,
     val isEmpty: Boolean = true,
     val count: Int = 0,
 )
@@ -100,14 +120,21 @@ class NickelViewModel(app: Application) : AndroidViewModel(app) {
         }
         // A category with nothing left in it (say, its last transaction was deleted) stops filtering.
         val activeCategory = categoryId?.takeIf { id -> filterCategories.any { it.id == id } }
+        val shown = if (activeCategory == null) ofKind else ofKind.filter { it.category.id == activeCategory }
         HomeState(
             loading = false,
-            transactions = if (activeCategory == null) ofKind else ofKind.filter { it.category.id == activeCategory },
+            transactions = shown,
             customCategories = ledger.customCategories,
             totals = Totals(income - expense, income, expense),
             filter = filter,
             filterCategories = filterCategories,
             categoryFilter = activeCategory,
+            summary = if (filter == Filter.ALL) null else summarize(
+                kind = if (filter == Filter.INCOME) Kind.INCOME else Kind.EXPENSE,
+                category = filterCategories.firstOrNull { it.id == activeCategory },
+                shown = shown,
+                ofKind = ofKind,
+            ),
             isEmpty = all.isEmpty(),
             count = all.size,
         )
@@ -121,6 +148,22 @@ class NickelViewModel(app: Application) : AndroidViewModel(app) {
                 runCatching { NickelWidget().updateAll(getApplication()) }
             }
         }
+    }
+
+    private fun summarize(kind: Kind, category: Category?, shown: List<Transaction>, ofKind: List<Transaction>): FilterSummary {
+        val zone = ZoneId.systemDefault()
+        val thisMonth = YearMonth.now(zone)
+        fun monthOf(t: Transaction) = YearMonth.from(Instant.ofEpochMilli(t.timestamp).atZone(zone))
+        val total = shown.sumOf { it.amountCents }
+        val kindTotal = ofKind.sumOf { it.amountCents }
+        return FilterSummary(
+            kind = kind,
+            category = category,
+            totalCents = total,
+            thisMonthCents = shown.filter { monthOf(it) == thisMonth }.sumOf { it.amountCents },
+            lastMonthCents = shown.filter { monthOf(it) == thisMonth.minusMonths(1) }.sumOf { it.amountCents },
+            share = if (category == null || kindTotal == 0L) null else total.toFloat() / kindTotal,
+        )
     }
 
     fun setFilter(value: Filter) {
@@ -204,20 +247,22 @@ class NickelViewModel(app: Application) : AndroidViewModel(app) {
         _transfer.value = TransferState.Idle
     }
 
-    fun export(uri: Uri) {
+    private val _shareExports = Channel<File>(Channel.BUFFERED)
+    /** Export files ready to hand to the share sheet. */
+    val shareExports: Flow<File> = _shareExports.receiveAsFlow()
+
+    /** Writes every transaction to a CSV in the cache, then offers it via [shareExports]. */
+    fun export() {
         viewModelScope.launch {
             val transactions = repository.ledger.value?.transactions.orEmpty()
-            val ok = withContext(Dispatchers.IO) {
+            val file = withContext(Dispatchers.IO) {
                 runCatching {
-                    getApplication<Application>().contentResolver.openOutputStream(uri, "wt")?.use {
-                        it.write(LedgerCsv.export(transactions).toByteArray(Charsets.UTF_8))
-                    } ?: error("no stream")
-                }.isSuccess
+                    ExportShare.fileFor(getApplication(), "nickel-${LocalDate.now()}.csv").apply {
+                        writeText(LedgerCsv.export(transactions), Charsets.UTF_8)
+                    }
+                }.getOrNull()
             }
-            val n = transactions.size
-            _messages.send(
-                if (ok) "Exported $n transaction${if (n == 1) "" else "s"}" else "Couldn't write that file"
-            )
+            if (file != null) _shareExports.send(file) else _messages.send("Couldn't prepare the export")
         }
     }
 
