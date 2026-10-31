@@ -107,3 +107,7 @@ app/src/main/java/io/github/draumaz/nickel/
 
 Kotlin · Jetpack Compose · Material 3 (1.5 beta, Expressive APIs) ·
 Android Gradle Plugin 9 · min SDK 29, target SDK 37
+
+## License
+
+Nickel is released under the [MIT License](LICENSE).
