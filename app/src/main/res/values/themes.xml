@@ -1,0 +1,7 @@
+<resources>
+    <style name="Theme.Nickel" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">#FFF6FBF4</item>
+        <item name="android:windowSplashScreenBackground">#FFF6FBF4</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>
+    </style>
+</resources>
