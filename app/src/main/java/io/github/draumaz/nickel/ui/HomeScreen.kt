@@ -92,6 +92,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -140,6 +141,29 @@ fun HomeScreen(viewModel: NickelViewModel, onOpenSettings: () -> Unit) {
     val snackbar = remember { SnackbarHostState() }
     val listState = rememberLazyListState()
 
+    // Hide the add button while scrolling down through the list; bring it back on any
+    // upward scroll or at the top.
+    var fabShownByScroll by remember { mutableStateOf(true) }
+    LaunchedEffect(listState) {
+        var lastIndex = listState.firstVisibleItemIndex
+        var lastOffset = listState.firstVisibleItemScrollOffset
+        snapshotFlow { listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset }
+            .collect { (index, offset) ->
+                val delta = when {
+                    index > lastIndex -> Int.MAX_VALUE
+                    index < lastIndex -> Int.MIN_VALUE
+                    else -> offset - lastOffset
+                }
+                when {
+                    index == 0 && offset == 0 -> fabShownByScroll = true
+                    delta > 12 -> fabShownByScroll = false
+                    delta < -12 -> fabShownByScroll = true
+                }
+                lastIndex = index
+                lastOffset = offset
+            }
+    }
+
     var fabExpanded by rememberSaveable { mutableStateOf(false) }
     var sheetKind by remember { mutableStateOf<Kind?>(null) }
     var editing by remember { mutableStateOf<Transaction?>(null) }
@@ -168,13 +192,14 @@ fun HomeScreen(viewModel: NickelViewModel, onOpenSettings: () -> Unit) {
         snackbarHost = { SnackbarHost(snackbar) },
         floatingActionButtonPosition = FabPosition.Center,
         floatingActionButton = {
-            val fabVisible by remember { derivedStateOf { !state.loading } }
+            val fabVisible by remember { derivedStateOf { !state.loading && fabShownByScroll } }
             FloatingActionButtonMenu(
                 expanded = fabExpanded,
                 horizontalAlignment = Alignment.CenterHorizontally,
                 button = {
                     ScallopFab(
                         expanded = fabExpanded,
+                        enabled = fabVisible || fabExpanded,
                         onToggle = {
                             Haptics.fabToggle(context, opening = !fabExpanded)
                             fabExpanded = !fabExpanded
@@ -346,6 +371,7 @@ private fun LazyListScope.transactionList(
 @Composable
 private fun ScallopFab(
     expanded: Boolean,
+    enabled: Boolean,
     onToggle: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -393,6 +419,7 @@ private fun ScallopFab(
             .clickable(
                 interactionSource = interaction,
                 indication = null,
+                enabled = enabled,
                 role = Role.Button,
                 onClickLabel = if (expanded) "Close menu" else "Add transaction",
                 onClick = onToggle,
