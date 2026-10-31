@@ -3,6 +3,7 @@ package io.github.draumaz.nickel.ui
 import android.app.Application
 import android.net.Uri
 import android.provider.OpenableColumns
+import androidx.glance.appwidget.updateAll
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.draumaz.nickel.data.Category
@@ -14,6 +15,7 @@ import io.github.draumaz.nickel.data.Settings
 import io.github.draumaz.nickel.data.SettingsRepository
 import io.github.draumaz.nickel.data.Transaction
 import io.github.draumaz.nickel.data.TransactionRepository
+import io.github.draumaz.nickel.widget.NickelWidget
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.channels.Channel
@@ -24,6 +26,8 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -92,6 +96,12 @@ class NickelViewModel(app: Application) : AndroidViewModel(app) {
 
     init {
         viewModelScope.launch { repository.load() }
+        // Redraw home-screen widgets whenever the ledger changes after the first load.
+        viewModelScope.launch {
+            repository.ledger.filterNotNull().drop(1).collect {
+                runCatching { NickelWidget().updateAll(getApplication()) }
+            }
+        }
     }
 
     fun setFilter(value: Filter) {
