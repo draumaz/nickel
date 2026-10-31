@@ -37,6 +37,7 @@ import androidx.compose.material.icons.rounded.School
 import androidx.compose.material.icons.rounded.Shield
 import androidx.compose.material.icons.rounded.ShoppingBag
 import androidx.compose.material.icons.rounded.ShoppingCart
+import androidx.compose.material.icons.rounded.SmokingRooms
 import androidx.compose.material.icons.rounded.Spa
 import androidx.compose.material.icons.rounded.SportsEsports
 import androidx.compose.material.icons.rounded.Subscriptions
@@ -119,6 +120,7 @@ object CategoryIcons {
             "outdoors" to Icons.Rounded.Park,
             "art" to Icons.Rounded.Brush,
             "music" to Icons.Rounded.MusicNote,
+            "smoking" to Icons.Rounded.SmokingRooms,
         )
     }
 
@@ -134,6 +136,7 @@ object CategoryIcons {
         listOf("restaurant", "dining", "dinner", "lunch") to "restaurant",
         listOf("food", "snack", "candy", "junk", "takeout", "eat") to "fastfood",
         listOf("bar", "alcohol", "beer", "wine", "drink") to "bar",
+        listOf("nicotine", "vape", "vaping", "smok", "cigar", "tobacco", "zyn") to "smoking",
         listOf("health", "medical", "doctor", "pharm", "dental", "therapy") to "health",
         listOf("hospital") to "hospital",
         listOf("energy", "electric", "power", "utilit") to "bolt",
@@ -238,6 +241,7 @@ object Categories {
         builtIn("TRAVEL", "Travel", Kind.EXPENSE, "flight", Tone.PRIMARY, "clover8"),
         builtIn("EDUCATION", "Education", Kind.EXPENSE, "school", Tone.SECONDARY, "slanted"),
         builtIn("PETS", "Pets", Kind.EXPENSE, "pets", Tone.TERTIARY, "ghostish"),
+        builtIn("NICOTINE", "Nicotine", Kind.EXPENSE, "smoking", Tone.SECONDARY, "bun"),
         builtIn("OTHER_EXPENSE", "Other", Kind.EXPENSE, "more", Tone.SECONDARY, "puffy"),
     )
 
