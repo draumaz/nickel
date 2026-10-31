@@ -112,20 +112,22 @@ val LocalMoneyColors = staticCompositionLocalOf {
 private fun moneyColors(scheme: ColorScheme, dark: Boolean): MoneyColors {
     // Pull the hues toward the scheme so they feel native next to dynamic color.
     fun harmonize(c: Color, amount: Float = 0.2f) = lerp(c, scheme.primary, amount)
-    fun soften(c: Color) = lerp(c, scheme.primaryContainer, 0.35f)
+    // The pills sit on primaryContainer, so their containers are pushed away from it
+    // (lighter in dark mode, darker in light mode) to stay legible when the scheme is green.
+    fun pill(c: Color) = lerp(c, scheme.onPrimaryContainer, 0.12f)
     return if (dark) MoneyColors(
         income = harmonize(Color(0xFF8FDCA8)),
-        incomeContainer = soften(Color(0xFF1F4A32)),
-        onIncomeContainer = Color(0xFFC4F2D2),
+        incomeContainer = pill(Color(0xFF2B6B47)),
+        onIncomeContainer = Color(0xFFD6F8E0),
         expense = harmonize(Color(0xFFFFB4A9)),
-        expenseContainer = soften(Color(0xFF5E2C27)),
-        onExpenseContainer = Color(0xFFFFDAD4),
+        expenseContainer = pill(Color(0xFF7A3A33)),
+        onExpenseContainer = Color(0xFFFFE2DD),
     ) else MoneyColors(
         income = harmonize(Color(0xFF1B7A45)),
-        incomeContainer = soften(Color(0xFFC4F2D2)),
+        incomeContainer = pill(Color(0xFFD3F5DD)),
         onIncomeContainer = Color(0xFF00210E),
         expense = harmonize(Color(0xFFB3261E)),
-        expenseContainer = soften(Color(0xFFFFDAD4)),
+        expenseContainer = pill(Color(0xFFFFE1DC)),
         onExpenseContainer = Color(0xFF410002),
     )
 }

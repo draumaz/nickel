@@ -3,7 +3,12 @@ package io.github.draumaz.nickel.ui
 import androidx.activity.compose.PredictiveBackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -32,7 +37,6 @@ import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Upload
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.BasicAlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -60,7 +64,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -68,7 +71,9 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.draumaz.nickel.R
 import io.github.draumaz.nickel.data.ImportPlan
@@ -371,73 +376,100 @@ private fun Footer() {
     }
 }
 
+/**
+ * One dialog for the whole import: the card morphs between reading, preview, and saving
+ * instead of swapping separate dialogs, so each step flows into the next.
+ */
 @Composable
 private fun TransferDialogs(
     state: TransferState,
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    when (state) {
-        TransferState.Idle -> Unit
-        TransferState.Reading -> BusyDialog("Reading your file…")
-        TransferState.Importing -> BusyDialog("Tucking everything in…")
-        is TransferState.Failed -> AlertDialog(
-            onDismissRequest = onDismiss,
-            title = { Text("Couldn't import") },
-            text = { Text(state.message) },
-            confirmButton = { TextButton(onClick = onDismiss) { Text("OK") } },
-        )
-        is TransferState.Preview -> ImportPreviewDialog(state.plan, state.fileName, onConfirm, onDismiss)
-    }
-}
-
-@Composable
-private fun BusyDialog(message: String) {
-    BasicAlertDialog(onDismissRequest = {}) {
+    if (state == TransferState.Idle) return
+    val busy = state == TransferState.Reading || state == TransferState.Importing
+    BasicAlertDialog(
+        onDismissRequest = { if (!busy) onDismiss() },
+        properties = DialogProperties(dismissOnClickOutside = !busy, dismissOnBackPress = !busy),
+    ) {
+        val spatial = MaterialTheme.motionScheme.defaultSpatialSpec<IntSize>()
+        val effects = MaterialTheme.motionScheme.defaultEffectsSpec<Float>()
         Surface(
             shape = RoundedCornerShape(28.dp),
             color = MaterialTheme.colorScheme.surfaceContainerHigh,
         ) {
-            Column(
-                Modifier.padding(horizontal = 40.dp, vertical = 32.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                LoadingIndicator(Modifier.size(72.dp))
-                Spacer(Modifier.height(16.dp))
-                Text(
-                    message,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    textAlign = TextAlign.Center,
-                )
+            AnimatedContent(
+                targetState = state,
+                contentKey = { it::class },
+                transitionSpec = {
+                    (fadeIn(effects) + scaleIn(initialScale = 0.92f))
+                        .togetherWith(fadeOut(effects))
+                        .using(SizeTransform(clip = true) { _, _ -> spatial })
+                },
+                contentAlignment = Alignment.Center,
+                label = "transfer",
+            ) { s ->
+                when (s) {
+                    TransferState.Reading -> BusyContent("Reading your file…")
+                    TransferState.Importing -> BusyContent("Tucking everything in…")
+                    is TransferState.Failed -> MessageContent("Couldn't import", s.message, onDismiss)
+                    is TransferState.Preview -> if (s.plan.transactions.isEmpty()) {
+                        MessageContent(
+                            "Already imported",
+                            "All ${s.plan.duplicates} transactions in ${s.fileName ?: "this file"} are already in Nickel.",
+                            onDismiss,
+                        )
+                    } else {
+                        PreviewContent(s.plan, s.fileName, onConfirm, onDismiss)
+                    }
+                    TransferState.Idle -> Unit
+                }
             }
+        }
+    }
+}
+
+@Composable
+private fun BusyContent(message: String) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 40.dp, vertical = 32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        LoadingIndicator(Modifier.size(72.dp))
+        Spacer(Modifier.height(16.dp))
+        Text(
+            message,
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            textAlign = TextAlign.Center,
+        )
+    }
+}
+
+@Composable
+private fun MessageContent(title: String, body: String, onDismiss: () -> Unit) {
+    Column(Modifier.padding(24.dp)) {
+        Text(title, style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onSurface)
+        Spacer(Modifier.height(16.dp))
+        Text(body, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.height(24.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            TextButton(onClick = onDismiss) { Text("OK") }
         }
     }
 }
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun ImportPreviewDialog(
+private fun PreviewContent(
     plan: ImportPlan,
     fileName: String?,
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     val count = plan.transactions.size
-    if (count == 0) {
-        AlertDialog(
-            onDismissRequest = onDismiss,
-            title = { Text("Already imported") },
-            text = {
-                Text(
-                    "All ${plan.duplicates} transactions in ${fileName ?: "this file"} are already in Nickel."
-                )
-            },
-            confirmButton = { TextButton(onClick = onDismiss) { Text("OK") } },
-        )
-        return
-    }
-
     val zone = ZoneId.systemDefault()
     fun day(ms: Long) = Instant.ofEpochMilli(ms).atZone(zone).toLocalDate()
     val range = if (plan.earliest != null && plan.latest != null) {
@@ -454,80 +486,86 @@ private fun ImportPreviewDialog(
     val incomes = plan.transactions.count { it.kind == Kind.INCOME }
     val expenses = count - incomes
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        icon = {
-            Box(
-                Modifier
-                    .size(56.dp)
-                    .background(MaterialTheme.colorScheme.primaryContainer, MaterialShapes.Cookie9Sided.toShape()),
-                contentAlignment = Alignment.Center,
+    Column(Modifier.padding(24.dp)) {
+        Box(
+            Modifier
+                .size(56.dp)
+                .align(Alignment.CenterHorizontally)
+                .background(MaterialTheme.colorScheme.primaryContainer, MaterialShapes.Cookie9Sided.toShape()),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                Icons.Rounded.Download,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+            )
+        }
+        Spacer(Modifier.height(16.dp))
+        Text(
+            "Import $count transaction${if (count == 1) "" else "s"}?",
+            style = MaterialTheme.typography.headlineSmall,
+            color = MaterialTheme.colorScheme.onSurface,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(Modifier.height(16.dp))
+        fileName?.let {
+            Text(it, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+        }
+        val body = MaterialTheme.typography.bodyMedium
+        val bodyColor = MaterialTheme.colorScheme.onSurfaceVariant
+        range?.let { Text(it, style = body, color = bodyColor) }
+        Text(
+            "$expenses expense${if (expenses == 1) "" else "s"} · $incomes income${if (incomes == 1) "" else "s"}",
+            style = body,
+            color = bodyColor,
+        )
+        val skipped = buildList {
+            if (plan.duplicates > 0) add("${plan.duplicates} already in Nickel")
+            if (plan.unreadable > 0) add("${plan.unreadable} unreadable")
+        }
+        if (skipped.isNotEmpty()) {
+            Text("Skipping " + skipped.joinToString(" and "), style = body, color = bodyColor)
+        }
+        if (plan.newCategories.isNotEmpty()) {
+            Spacer(Modifier.height(16.dp))
+            Text(
+                "New categories",
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Spacer(Modifier.height(8.dp))
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                Icon(
-                    Icons.Rounded.Download,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                )
-            }
-        },
-        title = { Text("Import $count transaction${if (count == 1) "" else "s"}?", textAlign = TextAlign.Center) },
-        text = {
-            Column(Modifier.animateContentSize()) {
-                fileName?.let {
-                    Text(it, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
-                }
-                range?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
-                Text(
-                    "$expenses expense${if (expenses == 1) "" else "s"} · $incomes income${if (incomes == 1) "" else "s"}",
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-                val skipped = buildList {
-                    if (plan.duplicates > 0) add("${plan.duplicates} already in Nickel")
-                    if (plan.unreadable > 0) add("${plan.unreadable} unreadable")
-                }
-                if (skipped.isNotEmpty()) {
-                    Text(
-                        "Skipping " + skipped.joinToString(" and "),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                if (plan.newCategories.isNotEmpty()) {
-                    Spacer(Modifier.height(16.dp))
-                    Text(
-                        "New categories",
-                        style = MaterialTheme.typography.titleSmall,
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                plan.newCategories.forEach { c ->
+                    Row(
+                        Modifier
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+                            .padding(start = 4.dp, end = 12.dp, top = 4.dp, bottom = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        plan.newCategories.forEach { c ->
-                            Row(
-                                Modifier
-                                    .clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.surfaceContainerHighest)
-                                    .padding(start = 4.dp, end = 12.dp, top = 4.dp, bottom = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                CategoryBadge(c, size = 26.dp)
-                                Spacer(Modifier.width(6.dp))
-                                Text(c.label, style = MaterialTheme.typography.labelLarge)
-                            }
-                        }
+                        CategoryBadge(c, size = 26.dp)
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            c.label,
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
                 }
             }
-        },
-        confirmButton = {
+        }
+        Spacer(Modifier.height(24.dp))
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
             Button(onClick = onConfirm, shapes = ButtonDefaults.shapes()) { Text("Import") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
-        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-        titleContentColor = MaterialTheme.colorScheme.onSurface,
-        textContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-        iconContentColor = Color.Unspecified,
-    )
+        }
+    }
 }
