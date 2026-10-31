@@ -50,6 +50,7 @@ import androidx.compose.material3.ButtonGroupDefaults
 import androidx.compose.material3.ContainedLoadingIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.FabPosition
 import androidx.compose.material3.FloatingActionButtonMenu
 import androidx.compose.material3.FloatingActionButtonMenuItem
 import androidx.compose.material3.FilledTonalIconButton
@@ -159,10 +160,12 @@ fun HomeScreen(viewModel: NickelViewModel, onOpenSettings: () -> Unit) {
     Scaffold(
         containerColor = MaterialTheme.colorScheme.surfaceContainer,
         snackbarHost = { SnackbarHost(snackbar) },
+        floatingActionButtonPosition = FabPosition.Center,
         floatingActionButton = {
             val fabVisible by remember { derivedStateOf { !state.loading } }
             FloatingActionButtonMenu(
                 expanded = fabExpanded,
+                horizontalAlignment = Alignment.CenterHorizontally,
                 button = {
                     ToggleFloatingActionButton(
                         modifier = Modifier
@@ -172,7 +175,7 @@ fun HomeScreen(viewModel: NickelViewModel, onOpenSettings: () -> Unit) {
                             }
                             .animateFloatingActionButton(
                                 visible = fabVisible || fabExpanded,
-                                alignment = Alignment.BottomEnd,
+                                alignment = Alignment.BottomCenter,
                             ),
                         checked = fabExpanded,
                         onCheckedChange = {
