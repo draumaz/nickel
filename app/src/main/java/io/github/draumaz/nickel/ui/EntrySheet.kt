@@ -271,7 +271,7 @@ private fun EntryContent(
 
     var kind by rememberSaveable { mutableStateOf(editing?.kind ?: initialKind) }
     var input by rememberSaveable { mutableStateOf(editing?.let { Money.toInput(it.amountCents) } ?: "") }
-    var category by rememberSaveable { mutableStateOf(editing?.category ?: Categories.forKind(kind, customCategories).first()) }
+    var category by rememberSaveable { mutableStateOf(editing?.category ?: Categories.default(kind)) }
     var note by rememberSaveable { mutableStateOf(editing?.note ?: "") }
     var timestamp by rememberSaveable { mutableLongStateOf(editing?.timestamp ?: System.currentTimeMillis()) }
     var showDatePicker by remember { mutableStateOf(false) }
@@ -293,7 +293,7 @@ private fun EntryContent(
         if (kind == k) return
         haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
         kind = k
-        if (category.kind != k) category = Categories.forKind(k, customCategories).first()
+        if (category.kind != k) category = Categories.default(k)
     }
 
     Column(

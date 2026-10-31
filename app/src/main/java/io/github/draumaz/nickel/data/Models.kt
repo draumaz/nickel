@@ -242,6 +242,7 @@ object Categories {
         builtIn("EDUCATION", "Education", Kind.EXPENSE, "school", Tone.SECONDARY, "slanted"),
         builtIn("PETS", "Pets", Kind.EXPENSE, "pets", Tone.TERTIARY, "ghostish"),
         builtIn("NICOTINE", "Nicotine", Kind.EXPENSE, "smoking", Tone.SECONDARY, "bun"),
+        builtIn("INVESTMENTS", "Investments", Kind.EXPENSE, "chart", Tone.PRIMARY, "pentagon"),
         builtIn("OTHER_EXPENSE", "Other", Kind.EXPENSE, "more", Tone.SECONDARY, "puffy"),
     )
 
@@ -265,10 +266,13 @@ object Categories {
         )
     }
 
-    /** Built-ins first, in their curated order, then custom categories alphabetically. */
+    /** Preselected for a new entry: the first built-in of its kind (Paycheck, Groceries). */
+    fun default(kind: Kind): Category = builtIns.first { it.kind == kind }
+
+    /** Built-in and custom categories together, alphabetically, with "Other" last. */
     fun forKind(kind: Kind, custom: List<Category>): List<Category> =
-        builtIns.filter { it.kind == kind && !it.id.startsWith("OTHER") } +
-            custom.filter { it.kind == kind }.sortedBy { it.label.lowercase() } +
+        (builtIns.filter { it.kind == kind && !it.id.startsWith("OTHER") } + custom.filter { it.kind == kind })
+            .sortedBy { it.label.lowercase() } +
             fallback(kind)
 }
 

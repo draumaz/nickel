@@ -91,7 +91,6 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -108,7 +107,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.lerp
 import androidx.graphics.shapes.Morph
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.draumaz.nickel.R
@@ -411,19 +409,14 @@ private fun ScallopFab(
             .semantics { contentDescription = "Add transaction" },
         contentAlignment = Alignment.Center,
     ) {
-        // The shadow comes from a circle tucked inside the scallops: shadows of concave
-        // outlines are expensive enough to stall the render thread when they spin.
-        Box(
-            Modifier
-                .size(lerp(58.dp, 68.dp, morphProgress))
-                .shadow(6.dp, CircleShape)
-        )
+        // Slightly see-through, so no shadow: one would show through as a dark disc. The icon
+        // stays opaque to keep its contrast over whatever scrolls underneath.
         val shape = MorphShape(morph, morphProgress)
         Box(
             Modifier
                 .matchParentSize()
                 .graphicsLayer { rotationZ = idleRotation + kick.value }
-                .background(container, shape)
+                .background(container.copy(alpha = 0.88f), shape)
         )
         Icon(
             Icons.Rounded.Add,
