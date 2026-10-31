@@ -1,6 +1,14 @@
 package io.github.draumaz.nickel.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.graphics.shapes.Morph
+import io.github.draumaz.nickel.ui.components.MorphShape
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
@@ -42,7 +50,6 @@ import androidx.compose.material.icons.automirrored.rounded.TrendingDown
 import androidx.compose.material.icons.automirrored.rounded.TrendingUp
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Check
-import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.Savings
 import androidx.compose.material.icons.rounded.Settings
@@ -69,8 +76,6 @@ import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.ToggleButton
 import androidx.compose.material3.ToggleButtonDefaults
-import androidx.compose.material3.ToggleFloatingActionButton
-import androidx.compose.material3.ToggleFloatingActionButtonDefaults.animateIcon
 import androidx.compose.material3.animateFloatingActionButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
@@ -93,7 +98,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
@@ -105,6 +109,7 @@ import androidx.compose.ui.semantics.traversalIndex
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.lerp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.draumaz.nickel.R
 import io.github.draumaz.nickel.data.Kind
@@ -130,6 +135,7 @@ fun HomeScreen(viewModel: NickelViewModel, onOpenSettings: () -> Unit) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val refreshing by viewModel.refreshing.collectAsStateWithLifecycle()
     val haptics = LocalHapticFeedback.current
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val snackbar = remember { SnackbarHostState() }
     val listState = rememberLazyListState()
@@ -167,33 +173,19 @@ fun HomeScreen(viewModel: NickelViewModel, onOpenSettings: () -> Unit) {
                 expanded = fabExpanded,
                 horizontalAlignment = Alignment.CenterHorizontally,
                 button = {
-                    ToggleFloatingActionButton(
+                    ScallopFab(
+                        expanded = fabExpanded,
+                        onToggle = {
+                            Haptics.fabToggle(context, opening = !fabExpanded)
+                            fabExpanded = !fabExpanded
+                        },
                         modifier = Modifier
-                            .semantics {
-                                traversalIndex = -1f
-                                stateDescription = if (fabExpanded) "Expanded" else "Collapsed"
-                            }
+                            .semantics { traversalIndex = -1f }
                             .animateFloatingActionButton(
                                 visible = fabVisible || fabExpanded,
                                 alignment = Alignment.BottomCenter,
                             ),
-                        checked = fabExpanded,
-                        onCheckedChange = {
-                            haptics.performHapticFeedback(
-                                if (it) HapticFeedbackType.ToggleOn else HapticFeedbackType.ToggleOff
-                            )
-                            fabExpanded = it
-                        },
-                    ) {
-                        val icon by remember {
-                            derivedStateOf { if (checkedProgress > 0.5f) Icons.Rounded.Close else Icons.Rounded.Add }
-                        }
-                        Icon(
-                            painter = rememberVectorPainter(icon),
-                            contentDescription = "Add transaction",
-                            modifier = Modifier.animateIcon({ checkedProgress }),
-                        )
-                    }
+                    )
                 },
             ) {
                 FloatingActionButtonMenuItem(
@@ -343,6 +335,96 @@ private fun LazyListScope.transactionList(
                     .padding(bottom = 2.dp),
             )
         }
+    }
+}
+
+/**
+ * The add button: the same scalloped coin as the header mark, slowly turning. Tapping it
+ * gives the spin a springy kick, and opening morphs the scallops into a circle while the
+ * plus twists into a close icon.
+ */
+@Composable
+private fun ScallopFab(
+    expanded: Boolean,
+    onToggle: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val spatial = MaterialTheme.motionScheme.defaultSpatialSpec<Float>()
+    val fast = MaterialTheme.motionScheme.fastSpatialSpec<Float>()
+    val effects = MaterialTheme.motionScheme.defaultEffectsSpec<Color>()
+
+    val idle = rememberInfiniteTransition(label = "fabSpin")
+    val idleRotation by idle.animateFloat(
+        0f, 360f,
+        infiniteRepeatable(tween(14_000, easing = LinearEasing)),
+        label = "fabIdle",
+    )
+    // Extra turn added on every tap; a low-damping spring lets it overshoot and settle.
+    val kick = remember { Animatable(0f) }
+    LaunchedEffect(expanded) {
+        kick.animateTo(
+            kick.value + 120f,
+            spring(dampingRatio = 0.45f, stiffness = Spring.StiffnessLow),
+        )
+    }
+
+    val morphProgress by animateFloatAsState(if (expanded) 1f else 0f, spatial, label = "fabMorph")
+    val iconTurn by animateFloatAsState(if (expanded) 135f else 0f, spatial, label = "fabIcon")
+    val container by animateColorAsState(
+        if (expanded) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primaryContainer,
+        effects,
+        label = "fabContainer",
+    )
+    val content by animateColorAsState(
+        if (expanded) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onPrimaryContainer,
+        effects,
+        label = "fabContent",
+    )
+
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val scale by animateFloatAsState(if (pressed) 0.88f else 1f, fast, label = "fabPress")
+
+    val morph = remember { Morph(MaterialShapes.Cookie12Sided, MaterialShapes.Circle) }
+    Box(
+        modifier
+            .size(68.dp)
+            .graphicsLayer { scaleX = scale; scaleY = scale }
+            .clickable(
+                interactionSource = interaction,
+                indication = null,
+                role = Role.Button,
+                onClickLabel = if (expanded) "Close menu" else "Add transaction",
+                onClick = onToggle,
+            )
+            .semantics {
+                contentDescription = "Add transaction"
+                stateDescription = if (expanded) "Expanded" else "Collapsed"
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        // The shadow comes from a circle tucked inside the scallops: shadows of concave
+        // outlines are expensive enough to stall the render thread when they spin.
+        Box(
+            Modifier
+                .size(lerp(58.dp, 68.dp, morphProgress))
+                .shadow(6.dp, CircleShape)
+        )
+        val shape = MorphShape(morph, morphProgress)
+        Box(
+            Modifier
+                .matchParentSize()
+                .graphicsLayer { rotationZ = idleRotation + kick.value }
+                .background(container, shape)
+        )
+        Icon(
+            Icons.Rounded.Add,
+            contentDescription = null,
+            tint = content,
+            modifier = Modifier
+                .size(30.dp)
+                .graphicsLayer { rotationZ = iconTurn },
+        )
     }
 }
 
