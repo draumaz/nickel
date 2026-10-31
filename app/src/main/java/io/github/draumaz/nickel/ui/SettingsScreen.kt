@@ -70,7 +70,13 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.LinkAnnotation
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLinkStyles
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.withLink
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
@@ -79,6 +85,7 @@ import io.github.draumaz.nickel.R
 import io.github.draumaz.nickel.data.ImportPlan
 import io.github.draumaz.nickel.data.Kind
 import io.github.draumaz.nickel.ui.components.CategoryBadge
+import io.github.draumaz.nickel.ui.components.ScreenHeader
 import io.github.draumaz.nickel.ui.components.pressScale
 import io.github.draumaz.nickel.ui.components.segmentShape
 import kotlinx.coroutines.CancellationException
@@ -140,25 +147,19 @@ fun SettingsScreen(viewModel: NickelViewModel, onBack: () -> Unit) {
                 .padding(horizontal = 16.dp)
                 .navigationBarsPadding(),
         ) {
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(top = 12.dp, bottom = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                FilledTonalIconButton(
-                    onClick = onBack,
-                    shapes = IconButtonDefaults.shapes(),
-                ) {
-                    Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back")
-                }
-                Spacer(Modifier.width(12.dp))
-                Text(
-                    "Settings",
-                    style = MaterialTheme.typography.headlineMediumEmphasized,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-            }
+            ScreenHeader(
+                title = "Settings",
+                subtitle = "Make Nickel yours",
+                leading = {
+                    FilledTonalIconButton(
+                        onClick = onBack,
+                        shapes = IconButtonDefaults.shapes(),
+                        modifier = Modifier.size(44.dp),
+                    ) {
+                        Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back")
+                    }
+                },
+            )
 
             SectionLabel("Appearance")
             SettingRow(
@@ -346,6 +347,9 @@ private fun PaletteRow(shape: RoundedCornerShape) {
     }
 }
 
+private const val REPO_URL = "https://github.com/draumaz/nickel"
+private const val AUTHOR_URL = "https://github.com/draumaz"
+
 @Composable
 private fun Footer() {
     Column(
@@ -368,8 +372,16 @@ private fun Footer() {
             )
         }
         Spacer(Modifier.height(8.dp))
+        val linkStyle = TextLinkStyles(
+            SpanStyle(color = MaterialTheme.colorScheme.primary, textDecoration = TextDecoration.Underline)
+        )
         Text(
-            "Nickel 1.0",
+            buildAnnotatedString {
+                withLink(LinkAnnotation.Url(REPO_URL, linkStyle)) { append("Nickel") }
+                append(", 1.0\nby ")
+                withLink(LinkAnnotation.Url(AUTHOR_URL, linkStyle)) { append("draumaz") }
+            },
+            textAlign = TextAlign.Center,
             style = MaterialTheme.typography.labelLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

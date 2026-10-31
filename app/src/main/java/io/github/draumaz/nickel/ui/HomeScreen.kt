@@ -111,6 +111,7 @@ import io.github.draumaz.nickel.data.Money
 import io.github.draumaz.nickel.data.Transaction
 import io.github.draumaz.nickel.ui.components.CategoryBadge
 import io.github.draumaz.nickel.ui.components.RollingText
+import io.github.draumaz.nickel.ui.components.ScreenHeader
 import io.github.draumaz.nickel.ui.components.pressScale
 import io.github.draumaz.nickel.ui.components.segmentShape
 import io.github.draumaz.nickel.ui.theme.NickelTheme
@@ -351,28 +352,12 @@ private fun Header(onOpenSettings: () -> Unit) {
         in 17..21 -> "Good evening"
         else -> "Up late?"
     }
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .padding(start = 8.dp, end = 8.dp, top = 20.dp, bottom = 16.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        CoinMark()
-        Spacer(Modifier.width(12.dp))
-        Column(Modifier.weight(1f)) {
-            Text(
-                "Nickel",
-                style = MaterialTheme.typography.headlineMediumEmphasized,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-            Text(
-                greeting,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        SettingsButton(onOpenSettings)
-    }
+    ScreenHeader(
+        title = "Nickel",
+        subtitle = greeting,
+        leading = { CoinMark() },
+        trailing = { SettingsButton(onOpenSettings) },
+    )
 }
 
 /** Gear that gives a springy quarter-turn while pressed. */
