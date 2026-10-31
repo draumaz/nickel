@@ -1,28 +1,25 @@
 package io.github.draumaz.nickel.ui
 
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.spring
-import androidx.compose.foundation.clickable
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.semantics.contentDescription
-import androidx.graphics.shapes.Morph
-import io.github.draumaz.nickel.ui.components.MorphShape
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -40,6 +37,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
@@ -92,38 +91,45 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.traversalIndex
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.lerp
+import androidx.graphics.shapes.Morph
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.draumaz.nickel.R
+import io.github.draumaz.nickel.data.Category
 import io.github.draumaz.nickel.data.Kind
 import io.github.draumaz.nickel.data.Money
 import io.github.draumaz.nickel.data.Transaction
 import io.github.draumaz.nickel.ui.components.CategoryBadge
+import io.github.draumaz.nickel.ui.components.MorphShape
 import io.github.draumaz.nickel.ui.components.RollingText
 import io.github.draumaz.nickel.ui.components.ScreenHeader
 import io.github.draumaz.nickel.ui.components.pressScale
+import io.github.draumaz.nickel.ui.components.rememberTimeFormatter
 import io.github.draumaz.nickel.ui.components.segmentShape
 import io.github.draumaz.nickel.ui.theme.NickelTheme
-import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
-import java.time.format.FormatStyle
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -247,13 +253,23 @@ fun HomeScreen(viewModel: NickelViewModel, onOpenSettings: () -> Unit) {
                     )
                 }
                 item(key = "filter", contentType = "filter") {
-                    FilterRow(
-                        selected = state.filter,
-                        onSelect = {
-                            haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
-                            viewModel.setFilter(it)
-                        },
-                    )
+                    Column {
+                        FilterRow(
+                            selected = state.filter,
+                            onSelect = {
+                                haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+                                viewModel.setFilter(it)
+                            },
+                        )
+                        CategoryFilterCarousel(
+                            categories = state.filterCategories,
+                            selected = state.categoryFilter,
+                            onSelect = {
+                                haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+                                viewModel.setCategoryFilter(it)
+                            },
+                        )
+                    }
                 }
 
                 when {
@@ -609,7 +625,7 @@ private fun StatPill(
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun FilterRow(selected: Filter, onSelect: (Filter) -> Unit) {
-    val options = listOf(Filter.ALL to "All", Filter.INCOME to "Income", Filter.EXPENSE to "Expenses")
+    val options = listOf(Filter.ALL to "All", Filter.EXPENSE to "Expenses", Filter.INCOME to "Income")
     Row(
         Modifier
             .fillMaxWidth()
@@ -645,6 +661,44 @@ private fun FilterRow(selected: Filter, onSelect: (Filter) -> Unit) {
                     }
                 }
                 Text(label, maxLines = 1)
+            }
+        }
+    }
+}
+
+/**
+ * Categories within the income or expense filter, popping open under the filter bar.
+ * Tapping a category filters to it; tapping it again clears the filter.
+ */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+private fun CategoryFilterCarousel(
+    categories: List<Category>,
+    selected: String?,
+    onSelect: (String?) -> Unit,
+) {
+    // Keep showing the last categories while the carousel collapses, rather than emptying it first.
+    var shown by remember { mutableStateOf(categories) }
+    LaunchedEffect(categories) { if (categories.isNotEmpty()) shown = categories }
+
+    val spatial = MaterialTheme.motionScheme.defaultSpatialSpec<IntSize>()
+    AnimatedVisibility(
+        visible = categories.isNotEmpty(),
+        enter = expandVertically(spatial, expandFrom = Alignment.Top) + fadeIn(),
+        exit = shrinkVertically(spatial, shrinkTowards = Alignment.Top) + fadeOut(),
+    ) {
+        LazyRow(
+            contentPadding = PaddingValues(top = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            items(shown, key = { it.id }) { category ->
+                CategoryChip(
+                    category = category,
+                    selected = category.id == selected,
+                    onClick = { onSelect(if (category.id == selected) null else category.id) },
+                    badgeSize = 44.dp,
+                    modifier = Modifier.animateItem(),
+                )
             }
         }
     }
@@ -691,10 +745,19 @@ private fun TransactionRow(
 ) {
     val dismissState = rememberSwipeToDismissBoxState()
     val money = NickelTheme.money
-    val time = remember(transaction.timestamp) {
-        Instant.ofEpochMilli(transaction.timestamp).atZone(ZoneId.systemDefault()).toLocalTime()
-            .format(DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT))
+    val timeFormatter = rememberTimeFormatter()
+    val time = remember(transaction.timestamp, timeFormatter) {
+        Instant.ofEpochMilli(transaction.timestamp).atZone(ZoneId.systemDefault()).format(timeFormatter)
     }
+    // The same slow turn as the add button and coin, started at a different angle per row
+    // so neighbouring shapes don't spin in lockstep.
+    val phase = remember(transaction.id) { (transaction.id % 360).toFloat() }
+    val spin = rememberInfiniteTransition(label = "badge")
+    val badgeRotation = spin.animateFloat(
+        phase, phase + 360f,
+        infiniteRepeatable(tween(14_000, easing = LinearEasing)),
+        label = "badgeRotation",
+    )
 
     SwipeToDismissBox(
         state = dismissState,
@@ -742,7 +805,7 @@ private fun TransactionRow(
                 Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                CategoryBadge(transaction.category, size = 44.dp)
+                CategoryBadge(transaction.category, size = 44.dp, shapeRotation = { badgeRotation.value })
                 Spacer(Modifier.width(16.dp))
                 Column(Modifier.weight(1f)) {
                     Text(

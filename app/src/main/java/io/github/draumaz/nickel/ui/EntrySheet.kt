@@ -5,15 +5,18 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -23,6 +26,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -32,7 +36,6 @@ import androidx.compose.material.icons.automirrored.rounded.TrendingUp
 import androidx.compose.material.icons.rounded.CalendarToday
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.DeleteOutline
-import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ButtonGroupDefaults
@@ -40,13 +43,13 @@ import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.SheetState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
@@ -55,6 +58,7 @@ import androidx.compose.material3.TimePicker
 import androidx.compose.material3.TimePickerDialog
 import androidx.compose.material3.ToggleButton
 import androidx.compose.material3.ToggleButtonDefaults
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
@@ -67,6 +71,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.AbsoluteAlignment
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -76,7 +81,6 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
@@ -84,7 +88,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import io.github.draumaz.nickel.data.Categories
 import io.github.draumaz.nickel.data.Category
@@ -94,6 +98,7 @@ import io.github.draumaz.nickel.data.Transaction
 import io.github.draumaz.nickel.ui.components.CategoryBadge
 import io.github.draumaz.nickel.ui.components.PoppingText
 import io.github.draumaz.nickel.ui.components.onToneContainer
+import io.github.draumaz.nickel.ui.components.rememberTimeFormatter
 import io.github.draumaz.nickel.ui.components.toneContainer
 import io.github.draumaz.nickel.ui.theme.NickelTheme
 import java.time.Instant
@@ -102,7 +107,6 @@ import java.time.LocalTime
 import java.time.ZoneId
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
-import java.time.format.FormatStyle
 import kotlin.math.abs
 import kotlin.math.exp
 import kotlin.math.sign
@@ -155,38 +159,39 @@ private fun applyKey(input: String, key: Char): String {
     }
 }
 
+private val SwipeThreshold = 48.dp
+private val SwipeReach = 96.dp
+
+/** Where the keypad has been dragged to, and whether letting go now would switch kinds. */
+private class KindSwipeState {
+    val offset = Animatable(0f)
+    var armed by mutableStateOf(false)
+}
+
+private fun Kind.other() = if (this == Kind.EXPENSE) Kind.INCOME else Kind.EXPENSE
+
 /**
- * Swiping across the keypad flips between expense and income, following the switch
- * above it: swiping toward the start selects the trailing option, like turning a page.
- * The keypad follows the finger with some resistance and springs back on release; a
- * swipe toward the option already selected only stretches a little.
+ * Swiping across the keypad flips between expense and income. It wraps around like an
+ * endless carousel: a swipe either way switches to the other kind. The keypad follows the
+ * finger with some resistance and springs back on release.
  */
 @Composable
-private fun Modifier.kindSwipe(kind: Kind, onSelect: (Kind) -> Unit): Modifier {
+private fun Modifier.kindSwipe(state: KindSwipeState, kind: Kind, onSelect: (Kind) -> Unit): Modifier {
     val haptics = LocalHapticFeedback.current
-    val layoutDirection = LocalLayoutDirection.current
     val scope = rememberCoroutineScope()
     val springBack = MaterialTheme.motionScheme.defaultSpatialSpec<Float>()
-    val offset = remember { Animatable(0f) }
     val currentKind by rememberUpdatedState(kind)
     val currentOnSelect by rememberUpdatedState(onSelect)
 
-    return pointerInput(layoutDirection) {
-        val threshold = 48.dp.toPx()
-        val reach = 96.dp.toPx()
+    return pointerInput(Unit) {
+        val threshold = SwipeThreshold.toPx()
+        val reach = SwipeReach.toPx()
         var total = 0f
-        var armed = false
-
-        // A drag toward the start edge reveals the trailing option.
-        fun target(): Kind {
-            val towardStart = if (layoutDirection == LayoutDirection.Ltr) total < 0 else total > 0
-            return if (towardStart) Kind.INCOME else Kind.EXPENSE
-        }
 
         fun release() {
-            if (armed) currentOnSelect(target())
-            armed = false
-            scope.launch { offset.animateTo(0f, springBack) }
+            if (state.armed) currentOnSelect(currentKind.other())
+            state.armed = false
+            scope.launch { state.offset.animateTo(0f, springBack) }
         }
 
         detectHorizontalDragGestures(
@@ -196,17 +201,60 @@ private fun Modifier.kindSwipe(kind: Kind, onSelect: (Kind) -> Unit): Modifier {
         ) { change, dragAmount ->
             change.consume()
             total += dragAmount
-            val canSwitch = target() != currentKind
-            // Ease out toward a limit, much shorter when there's nothing to switch to.
-            val limit = if (canSwitch) reach else reach / 4
-            val eased = sign(total) * limit * (1 - exp(-abs(total) / limit))
-            scope.launch { offset.snapTo(eased) }
+            // Ease out toward a limit.
+            val eased = sign(total) * reach * (1 - exp(-abs(total) / reach))
+            scope.launch { state.offset.snapTo(eased) }
 
-            val nowArmed = canSwitch && abs(total) >= threshold
-            if (nowArmed && !armed) haptics.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
-            armed = nowArmed
+            val nowArmed = abs(total) >= threshold
+            if (nowArmed && !state.armed) haptics.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
+            state.armed = nowArmed
         }
-    }.graphicsLayer { translationX = offset.value }
+    }.graphicsLayer { translationX = state.offset.value }
+}
+
+/**
+ * The badge of the kind a swipe would switch to, growing into whichever gap the keypad
+ * leaves as it's dragged aside and popping once letting go would switch. Sits behind
+ * the keypad, filling its bounds; [gutter] is the padding beside the keypad, which the
+ * gap includes.
+ */
+@Composable
+private fun BoxScope.KindSwipeHints(state: KindSwipeState, kind: Kind, gutter: Dp) {
+    val target = kind.other()
+    val popped by animateFloatAsState(
+        if (state.armed) 1.15f else 1f,
+        MaterialTheme.motionScheme.fastSpatialSpec(),
+        label = "hintPop",
+    )
+    listOf(true, false).forEach { onLeft ->
+        Box(
+            Modifier
+                .align(if (onLeft) AbsoluteAlignment.CenterLeft else AbsoluteAlignment.CenterRight)
+                .size(40.dp)
+                .graphicsLayer {
+                    // Dragging right uncovers the left edge, and vice versa.
+                    val uncovered = (if (onLeft) state.offset.value else -state.offset.value).coerceAtLeast(0f)
+                    val armedAt = SwipeReach.toPx() * (1 - exp(-SwipeThreshold.toPx() / SwipeReach.toPx()))
+                    val progress = (uncovered / armedAt).coerceIn(0f, 1f)
+                    // Centre the badge in the gap between the sheet edge and the keypad.
+                    val centre = (uncovered - gutter.toPx()) / 2
+                    translationX = (centre - size.width / 2) * if (onLeft) 1 else -1
+                    alpha = progress
+                    val scale = (0.5f + 0.5f * progress) * popped
+                    scaleX = scale
+                    scaleY = scale
+                }
+                .background(MaterialTheme.colorScheme.primaryContainer, CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                if (target == Kind.INCOME) Icons.AutoMirrored.Rounded.TrendingUp else Icons.AutoMirrored.Rounded.TrendingDown,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                modifier = Modifier.size(22.dp),
+            )
+        }
+    }
 }
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class, ExperimentalMaterial3Api::class)
@@ -358,47 +406,34 @@ private fun EntryContent(
                 keyboardActions = KeyboardActions(onDone = { focus.clearFocus() }),
                 modifier = Modifier.weight(1f),
             )
-            FilledTonalButton(
-                onClick = { showDatePicker = true },
-                shapes = ButtonDefaults.shapes(),
-                contentPadding = PaddingValues(horizontal = 14.dp),
-                modifier = Modifier.height(56.dp),
-            ) {
-                Icon(Icons.Rounded.CalendarToday, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(8.dp))
-                Text(dayLabel(timestamp), maxLines = 1)
-            }
-            FilledTonalButton(
-                onClick = { showTimePicker = true },
-                shapes = ButtonDefaults.shapes(),
-                contentPadding = PaddingValues(horizontal = 14.dp),
-                modifier = Modifier.height(56.dp),
-            ) {
-                Icon(Icons.Rounded.Schedule, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(8.dp))
-                Text(timeLabel(timestamp), maxLines = 1)
-            }
+            WhenPill(
+                timestamp = timestamp,
+                onPickDate = { showDatePicker = true },
+                onPickTime = { showTimePicker = true },
+            )
         }
 
         Spacer(Modifier.height(16.dp))
 
-        Keypad(
-            onKey = { key ->
-                haptics.performHapticFeedback(HapticFeedbackType.KeyboardTap)
-                val next = applyKey(input, key)
-                if (next == input && key != '<') {
-                    haptics.performHapticFeedback(HapticFeedbackType.Reject)
-                }
-                input = next
-            },
-            onClear = {
-                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                input = ""
-            },
-            modifier = Modifier
-                .padding(horizontal = 20.dp)
-                .kindSwipe(kind, ::selectKind),
-        )
+        val swipe = remember { KindSwipeState() }
+        Box(Modifier.padding(horizontal = 20.dp)) {
+            KindSwipeHints(swipe, kind, gutter = 20.dp)
+            Keypad(
+                onKey = { key ->
+                    haptics.performHapticFeedback(HapticFeedbackType.KeyboardTap)
+                    val next = applyKey(input, key)
+                    if (next == input && key != '<') {
+                        haptics.performHapticFeedback(HapticFeedbackType.Reject)
+                    }
+                    input = next
+                },
+                onClear = {
+                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                    input = ""
+                },
+                modifier = Modifier.kindSwipe(swipe, kind, ::selectKind),
+            )
+        }
 
         Spacer(Modifier.height(16.dp))
 
@@ -511,9 +546,46 @@ private fun EntryContent(
     }
 }
 
-private fun timeLabel(timestamp: Long): String =
-    Instant.ofEpochMilli(timestamp).atZone(ZoneId.systemDefault()).toLocalTime()
-        .format(DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT))
+/** Date and time in one pill, split down the middle: each half opens its own picker. */
+@Composable
+private fun WhenPill(timestamp: Long, onPickDate: () -> Unit, onPickTime: () -> Unit) {
+    Surface(
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+        modifier = Modifier.height(56.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                Modifier
+                    .fillMaxHeight()
+                    .clickable(onClickLabel = "Change date", onClick = onPickDate)
+                    .padding(start = 16.dp, end = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Icons.Rounded.CalendarToday, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text(dayLabel(timestamp), style = MaterialTheme.typography.labelLarge, maxLines = 1)
+            }
+            VerticalDivider(
+                Modifier.height(24.dp),
+                color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.25f),
+            )
+            Box(
+                Modifier
+                    .fillMaxHeight()
+                    .clickable(onClickLabel = "Change time", onClick = onPickTime)
+                    .padding(start = 10.dp, end = 16.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(timeLabel(timestamp, rememberTimeFormatter()), style = MaterialTheme.typography.labelLarge, maxLines = 1)
+            }
+        }
+    }
+}
+
+private fun timeLabel(timestamp: Long, formatter: DateTimeFormatter): String =
+    Instant.ofEpochMilli(timestamp).atZone(ZoneId.systemDefault()).format(formatter)
 
 private fun dayLabel(timestamp: Long): String {
     val zone = ZoneId.systemDefault()
@@ -528,11 +600,12 @@ private fun dayLabel(timestamp: Long): String {
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-private fun CategoryChip(
+internal fun CategoryChip(
     category: Category,
     selected: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    badgeSize: Dp = 56.dp,
 ) {
     val spatial = MaterialTheme.motionScheme.defaultSpatialSpec<Float>()
     val progress by animateFloatAsState(if (selected) 1f else 0f, spatial, label = "morph")
@@ -560,11 +633,11 @@ private fun CategoryChip(
     ) {
         CategoryBadge(
             category = category,
-            size = 56.dp,
+            size = badgeSize,
             shapeProgress = progress,
             containerColor = container,
             contentColor = content,
-            shapeRotation = rotation,
+            shapeRotation = { rotation },
             modifier = Modifier.graphicsLayer {
                 scaleX = scale
                 scaleY = scale

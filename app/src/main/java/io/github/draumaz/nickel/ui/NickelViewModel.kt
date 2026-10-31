@@ -6,6 +6,7 @@ import android.provider.OpenableColumns
 import androidx.glance.appwidget.updateAll
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import io.github.draumaz.nickel.data.Categories
 import io.github.draumaz.nickel.data.Category
 import io.github.draumaz.nickel.data.ImportException
 import io.github.draumaz.nickel.data.ImportPlan
@@ -43,6 +44,10 @@ data class HomeState(
     val customCategories: List<Category> = emptyList(),
     val totals: Totals = Totals(0, 0, 0),
     val filter: Filter = Filter.ALL,
+    /** Categories that have transactions of the filtered kind, offered as a second filter. */
+    val filterCategories: List<Category> = emptyList(),
+    /** Id of the category being filtered to, if any. */
+    val categoryFilter: String? = null,
     val isEmpty: Boolean = true,
     val count: Int = 0,
 )
@@ -60,6 +65,7 @@ class NickelViewModel(app: Application) : AndroidViewModel(app) {
     private val repository = TransactionRepository(app)
     private val settingsRepository = SettingsRepository(app)
     private val filter = MutableStateFlow(Filter.ALL)
+    private val categoryFilter = MutableStateFlow<String?>(null)
 
     private val _refreshing = MutableStateFlow(false)
     val refreshing: StateFlow<Boolean> = _refreshing.asStateFlow()
@@ -74,21 +80,34 @@ class NickelViewModel(app: Application) : AndroidViewModel(app) {
     /** One-off messages for a snackbar. */
     val messages: Flow<String> = _messages.receiveAsFlow()
 
-    val state: StateFlow<HomeState> = combine(repository.ledger, filter) { ledger, filter ->
+    val state: StateFlow<HomeState> = combine(repository.ledger, filter, categoryFilter) { ledger, filter, categoryId ->
         if (ledger == null) return@combine HomeState(loading = true, filter = filter)
         val all = ledger.transactions
         val income = all.filter { it.kind == Kind.INCOME }.sumOf { it.amountCents }
         val expense = all.filter { it.kind == Kind.EXPENSE }.sumOf { it.amountCents }
+        val ofKind = when (filter) {
+            Filter.ALL -> all
+            Filter.INCOME -> all.filter { it.kind == Kind.INCOME }
+            Filter.EXPENSE -> all.filter { it.kind == Kind.EXPENSE }
+        }
+        val filterCategories = when (filter) {
+            Filter.ALL -> emptyList()
+            else -> {
+                val used = ofKind.mapTo(HashSet()) { it.category.id }
+                val kind = if (filter == Filter.INCOME) Kind.INCOME else Kind.EXPENSE
+                Categories.forKind(kind, ledger.customCategories).filter { it.id in used }
+            }
+        }
+        // A category with nothing left in it (say, its last transaction was deleted) stops filtering.
+        val activeCategory = categoryId?.takeIf { id -> filterCategories.any { it.id == id } }
         HomeState(
             loading = false,
-            transactions = when (filter) {
-                Filter.ALL -> all
-                Filter.INCOME -> all.filter { it.kind == Kind.INCOME }
-                Filter.EXPENSE -> all.filter { it.kind == Kind.EXPENSE }
-            },
+            transactions = if (activeCategory == null) ofKind else ofKind.filter { it.category.id == activeCategory },
             customCategories = ledger.customCategories,
             totals = Totals(income - expense, income, expense),
             filter = filter,
+            filterCategories = filterCategories,
+            categoryFilter = activeCategory,
             isEmpty = all.isEmpty(),
             count = all.size,
         )
@@ -105,7 +124,13 @@ class NickelViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun setFilter(value: Filter) {
+        if (filter.value != value) categoryFilter.value = null
         filter.value = value
+    }
+
+    /** Filters to [id] within the current kind, or clears the category filter with `null`. */
+    fun setCategoryFilter(id: String?) {
+        categoryFilter.value = id
     }
 
     fun setDynamicColor(enabled: Boolean) = settingsRepository.setDynamicColor(enabled)

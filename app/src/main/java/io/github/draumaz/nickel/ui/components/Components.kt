@@ -1,5 +1,6 @@
 package io.github.draumaz.nickel.ui.components
 
+import android.text.format.DateFormat
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.Animatable
@@ -52,6 +53,9 @@ import androidx.compose.ui.unit.dp
 import androidx.graphics.shapes.Morph
 import io.github.draumaz.nickel.data.Category
 import io.github.draumaz.nickel.data.Tone
+import androidx.compose.ui.platform.LocalContext
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 /**
  * Text whose characters roll vertically like an odometer when they change. Characters are
@@ -129,7 +133,8 @@ fun onToneContainer(tone: Tone): Color = when (tone) {
 
 /**
  * A category icon sitting inside its signature Material shape. [shapeProgress] morphs from a
- * plain circle (0) to the category's shape (1).
+ * plain circle (0) to the category's shape (1). [shapeRotation] is read at draw time, so a
+ * spinning shape doesn't recompose the badge every frame.
  */
 @Composable
 fun CategoryBadge(
@@ -137,7 +142,7 @@ fun CategoryBadge(
     modifier: Modifier = Modifier,
     size: Dp = 48.dp,
     shapeProgress: Float = 1f,
-    shapeRotation: Float = 0f,
+    shapeRotation: () -> Float = { 0f },
     containerColor: Color = toneContainer(category.tone),
     contentColor: Color = onToneContainer(category.tone),
 ) {
@@ -148,7 +153,7 @@ fun CategoryBadge(
         Box(
             Modifier
                 .matchParentSize()
-                .graphicsLayer { rotationZ = shapeRotation }
+                .graphicsLayer { rotationZ = shapeRotation() }
                 .background(containerColor, shape)
         )
         Icon(
@@ -250,3 +255,17 @@ fun ScreenHeader(
         trailing()
     }
 }
+
+/**
+ * Short time format that follows the device's 12/24-hour setting, which the locale's own
+ * format ignores: `13:46` or `1:46 PM`.
+ */
+@Composable
+fun rememberTimeFormatter(): DateTimeFormatter {
+    val is24Hour = DateFormat.is24HourFormat(LocalContext.current)
+    return remember(is24Hour) {
+        val locale = Locale.getDefault()
+        DateTimeFormatter.ofPattern(DateFormat.getBestDateTimePattern(locale, if (is24Hour) "Hm" else "hm"), locale)
+    }
+}
+
