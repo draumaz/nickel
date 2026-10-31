@@ -1,6 +1,5 @@
 package io.github.draumaz.nickel.ui
 
-import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.clickable
@@ -58,8 +57,6 @@ import androidx.compose.material3.ContainedLoadingIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FabPosition
-import androidx.compose.material3.FloatingActionButtonMenu
-import androidx.compose.material3.FloatingActionButtonMenuItem
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButtonDefaults
@@ -90,7 +87,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -105,7 +101,6 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.traversalIndex
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -164,12 +159,9 @@ fun HomeScreen(viewModel: NickelViewModel, onOpenSettings: () -> Unit) {
             }
     }
 
-    var fabExpanded by rememberSaveable { mutableStateOf(false) }
     var sheetKind by remember { mutableStateOf<Kind?>(null) }
     var editing by remember { mutableStateOf<Transaction?>(null) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-
-    BackHandler(fabExpanded) { fabExpanded = false }
 
     fun deleteWithUndo(t: Transaction) {
         viewModel.delete(t)
@@ -193,45 +185,22 @@ fun HomeScreen(viewModel: NickelViewModel, onOpenSettings: () -> Unit) {
         floatingActionButtonPosition = FabPosition.Center,
         floatingActionButton = {
             val fabVisible by remember { derivedStateOf { !state.loading && fabShownByScroll } }
-            FloatingActionButtonMenu(
-                expanded = fabExpanded,
-                horizontalAlignment = Alignment.CenterHorizontally,
-                button = {
-                    ScallopFab(
-                        expanded = fabExpanded,
-                        enabled = fabVisible || fabExpanded,
-                        onToggle = {
-                            Haptics.fabToggle(context, opening = !fabExpanded)
-                            fabExpanded = !fabExpanded
-                        },
-                        modifier = Modifier
-                            .semantics { traversalIndex = -1f }
-                            .animateFloatingActionButton(
-                                visible = fabVisible || fabExpanded,
-                                alignment = Alignment.BottomCenter,
-                            ),
-                    )
+            // New entries start as expenses; the sheet's switch flips to income.
+            ScallopFab(
+                active = sheetKind != null && editing == null,
+                enabled = fabVisible,
+                onClick = {
+                    Haptics.fabToggle(context, opening = true)
+                    editing = null
+                    sheetKind = Kind.EXPENSE
                 },
-            ) {
-                FloatingActionButtonMenuItem(
-                    onClick = {
-                        fabExpanded = false
-                        editing = null
-                        sheetKind = Kind.INCOME
-                    },
-                    icon = { Icon(Icons.AutoMirrored.Rounded.TrendingUp, contentDescription = null) },
-                    text = { Text("Income") },
-                )
-                FloatingActionButtonMenuItem(
-                    onClick = {
-                        fabExpanded = false
-                        editing = null
-                        sheetKind = Kind.EXPENSE
-                    },
-                    icon = { Icon(Icons.AutoMirrored.Rounded.TrendingDown, contentDescription = null) },
-                    text = { Text("Expense") },
-                )
-            }
+                modifier = Modifier
+                    .semantics { traversalIndex = -1f }
+                    .animateFloatingActionButton(
+                        visible = fabVisible,
+                        alignment = Alignment.BottomCenter,
+                    ),
+            )
         },
     ) { padding ->
         if (state.loading) {
@@ -370,9 +339,9 @@ private fun LazyListScope.transactionList(
  */
 @Composable
 private fun ScallopFab(
-    expanded: Boolean,
+    active: Boolean,
     enabled: Boolean,
-    onToggle: () -> Unit,
+    onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val spatial = MaterialTheme.motionScheme.defaultSpatialSpec<Float>()
@@ -387,22 +356,22 @@ private fun ScallopFab(
     )
     // Extra turn added on every tap; a low-damping spring lets it overshoot and settle.
     val kick = remember { Animatable(0f) }
-    LaunchedEffect(expanded) {
+    LaunchedEffect(active) {
         kick.animateTo(
             kick.value + 120f,
             spring(dampingRatio = 0.45f, stiffness = Spring.StiffnessLow),
         )
     }
 
-    val morphProgress by animateFloatAsState(if (expanded) 1f else 0f, spatial, label = "fabMorph")
-    val iconTurn by animateFloatAsState(if (expanded) 135f else 0f, spatial, label = "fabIcon")
+    val morphProgress by animateFloatAsState(if (active) 1f else 0f, spatial, label = "fabMorph")
+    val iconTurn by animateFloatAsState(if (active) 135f else 0f, spatial, label = "fabIcon")
     val container by animateColorAsState(
-        if (expanded) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primaryContainer,
+        if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primaryContainer,
         effects,
         label = "fabContainer",
     )
     val content by animateColorAsState(
-        if (expanded) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onPrimaryContainer,
+        if (active) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onPrimaryContainer,
         effects,
         label = "fabContent",
     )
@@ -421,13 +390,9 @@ private fun ScallopFab(
                 indication = null,
                 enabled = enabled,
                 role = Role.Button,
-                onClickLabel = if (expanded) "Close menu" else "Add transaction",
-                onClick = onToggle,
+                onClick = onClick,
             )
-            .semantics {
-                contentDescription = "Add transaction"
-                stateDescription = if (expanded) "Expanded" else "Collapsed"
-            },
+            .semantics { contentDescription = "Add transaction" },
         contentAlignment = Alignment.Center,
     ) {
         // The shadow comes from a circle tucked inside the scallops: shadows of concave
