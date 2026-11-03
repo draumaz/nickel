@@ -33,6 +33,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.CurrencyExchange
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Upload
@@ -55,6 +56,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.toShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -83,6 +86,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.draumaz.nickel.R
 import io.github.draumaz.nickel.data.ImportPlan
 import io.github.draumaz.nickel.data.Kind
+import io.github.draumaz.nickel.data.Money
 import io.github.draumaz.nickel.export.ExportShare
 import io.github.draumaz.nickel.ui.components.CategoryBadge
 import io.github.draumaz.nickel.ui.components.ScreenHeader
@@ -92,6 +96,7 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.util.Currency
 
 @Composable
 fun SettingsScreen(viewModel: NickelViewModel, onBack: () -> Unit) {
@@ -100,6 +105,7 @@ fun SettingsScreen(viewModel: NickelViewModel, onBack: () -> Unit) {
     val transfer by viewModel.transfer.collectAsStateWithLifecycle()
     val haptics = LocalHapticFeedback.current
     val snackbar = remember { SnackbarHostState() }
+    var showCurrency by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         viewModel.messages.collect {
@@ -161,6 +167,29 @@ fun SettingsScreen(viewModel: NickelViewModel, onBack: () -> Unit) {
                 },
             )
             PaletteRow(shape = segmentShape(1, 2))
+
+            SectionLabel("Money")
+            SettingRow(
+                icon = Icons.Rounded.CurrencyExchange,
+                iconShape = MaterialShapes.Cookie9Sided,
+                title = "Currency",
+                subtitle = settings.currencyCode
+                    ?.let { runCatching { currencyLabel(Currency.getInstance(it)) }.getOrNull() }
+                    ?: "System default · ${currencyLabel(Money.systemCurrency)}",
+                shape = segmentShape(0, 1),
+                onClick = { showCurrency = true },
+            )
+            if (showCurrency) {
+                CurrencyDialog(
+                    selectedCode = settings.currencyCode,
+                    onDismiss = { showCurrency = false },
+                    onSelect = {
+                        haptics.performHapticFeedback(HapticFeedbackType.Confirm)
+                        viewModel.setCurrency(it)
+                        showCurrency = false
+                    },
+                )
+            }
 
             SectionLabel("Your data")
             SettingRow(

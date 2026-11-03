@@ -178,6 +178,11 @@ class NickelViewModel(app: Application) : AndroidViewModel(app) {
 
     fun setDynamicColor(enabled: Boolean) = settingsRepository.setDynamicColor(enabled)
 
+    fun setCurrency(code: String?) {
+        settingsRepository.setCurrency(code)
+        viewModelScope.launch { runCatching { NickelWidget().updateAll(getApplication()) } }
+    }
+
     fun refresh() {
         viewModelScope.launch {
             _refreshing.value = true

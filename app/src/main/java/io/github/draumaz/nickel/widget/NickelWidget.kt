@@ -35,6 +35,7 @@ import androidx.glance.text.TextStyle
 import io.github.draumaz.nickel.MainActivity
 import io.github.draumaz.nickel.data.Kind
 import io.github.draumaz.nickel.data.Money
+import io.github.draumaz.nickel.data.SettingsRepository
 import io.github.draumaz.nickel.data.Transaction
 import io.github.draumaz.nickel.data.TransactionRepository
 import java.time.Instant
@@ -48,6 +49,7 @@ class NickelWidget : GlanceAppWidget() {
     override val sizeMode = SizeMode.Exact
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
+        SettingsRepository(context) // applies the chosen currency to Money
         val repository = TransactionRepository(context)
         repository.load()
         val transactions = repository.ledger.value?.transactions.orEmpty()
