@@ -17,7 +17,8 @@ import java.io.File
  */
 object ExportShare {
 
-    private const val AUTHORITY = "io.github.draumaz.nickel.exports"
+    /** Matches the manifest's `${applicationId}.exports`, so debug and release can coexist. */
+    private fun authority(context: Context) = "${context.packageName}.exports"
 
     /** Where exports wait to be shared. Each export replaces the last. */
     fun fileFor(context: Context, name: String): File {
@@ -28,7 +29,7 @@ object ExportShare {
     }
 
     fun share(context: Context, file: File) {
-        val uri = FileProvider.getUriForFile(context, AUTHORITY, file)
+        val uri = FileProvider.getUriForFile(context, authority(context), file)
         val send = Intent(Intent.ACTION_SEND).apply {
             type = "text/csv"
             putExtra(Intent.EXTRA_STREAM, uri)

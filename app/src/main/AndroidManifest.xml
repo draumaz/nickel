@@ -29,7 +29,7 @@
 
         <provider
             android:name="androidx.core.content.FileProvider"
-            android:authorities="io.github.draumaz.nickel.exports"
+            android:authorities="${applicationId}.exports"
             android:exported="false"
             android:grantUriPermissions="true">
             <meta-data

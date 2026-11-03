@@ -24,6 +24,14 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
+            // No release keystore yet: sign with the local debug key so the release variant
+            // installs straight from Android Studio.
+            signingConfig = signingConfigs.getByName("debug")
+        }
+        debug {
+            // Installs alongside release as its own app, with the wrench icon from src/debug.
+            applicationIdSuffix = ".debug"
+            versionNameSuffix = "-debug"
         }
     }
     compileOptions {
