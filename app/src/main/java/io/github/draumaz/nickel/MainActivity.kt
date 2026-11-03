@@ -4,7 +4,25 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.EnterExitState
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.SeekableTransitionState
+import androidx.compose.animation.core.keyframes
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.animateDp
+import androidx.compose.animation.core.rememberTransition
+import androidx.compose.animation.scaleOut
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
@@ -25,6 +43,8 @@ import io.github.draumaz.nickel.ui.theme.NickelTheme
 
 private enum class Screen { HOME, SETTINGS }
 
+private const val BACK_MILLIS = 350
+
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
@@ -33,31 +53,81 @@ class MainActivity : ComponentActivity() {
             val viewModel: NickelViewModel = viewModel()
             val settings by viewModel.settings.collectAsStateWithLifecycle()
             NickelTheme(dynamicColor = settings.dynamicColor) {
-                var screen by rememberSaveable { mutableStateOf(Screen.HOME) }
+                // Survives recreation; the seekable state below drives the animation.
+                var saved by rememberSaveable { mutableStateOf(Screen.HOME) }
+                val nav = remember { SeekableTransitionState(saved) }
+                val transition = rememberTransition(nav, label = "screen")
+                val scope = rememberCoroutineScope()
                 val spatial = MaterialTheme.motionScheme.defaultSpatialSpec<IntOffset>()
+                val backFloat = tween<Float>(BACK_MILLIS, easing = LinearEasing)
+                val backOffset = tween<IntOffset>(BACK_MILLIS, easing = LinearEasing)
+                // Settings stays solid while it shrinks, so the two pages don't blur together,
+                // and only fades out over the last stretch.
+                val backFade = keyframes<Float> {
+                    durationMillis = BACK_MILLIS
+                    1f at BACK_MILLIS * 3 / 4 using LinearEasing
+                }
                 val effects = MaterialTheme.motionScheme.defaultEffectsSpec<Float>()
-                AnimatedContent(
-                    targetState = screen,
+
+                fun go(to: Screen) {
+                    saved = to
+                    scope.launch { nav.animateTo(to) }
+                }
+
+                // Keyed off `saved`, not the transition: scrubbing retargets the transition to Home,
+                // which would otherwise switch the handler off mid-gesture.
+                // Predictive back scrubs the real Settings -> Home transition, so Home slides in
+                // behind the shrinking page as the finger moves, then finishes or springs back.
+                PredictiveBackHandler(enabled = saved == Screen.SETTINGS) { events ->
+                    try {
+                        events.collect { nav.seekTo(it.progress, Screen.HOME) }
+                        saved = Screen.HOME
+                        scope.launch { nav.animateTo(Screen.HOME) }
+                    } catch (e: CancellationException) {
+                        scope.launch { nav.animateTo(Screen.SETTINGS) }
+                        throw e
+                    }
+                }
+
+                transition.AnimatedContent(
                     transitionSpec = {
                         if (targetState == Screen.SETTINGS) {
                             (slideInHorizontally(spatial) { it / 3 } + fadeIn(effects))
                                 .togetherWith(slideOutHorizontally(spatial) { -it / 8 } + fadeOut(effects))
                         } else {
-                            (slideInHorizontally(spatial) { -it / 8 } + fadeIn(effects))
-                                .togetherWith(slideOutHorizontally(spatial) { it / 3 } + fadeOut(effects))
+                            // Settings shrinks away on top while Home comes in underneath. Linear
+                            // tweens, because the back gesture seeks through this by progress and a
+                            // spring would be almost finished a third of the way in.
+                            (slideInHorizontally(backOffset) { -it / 8 } + fadeIn(backFloat))
+                                .togetherWith(
+                                    scaleOut(backFloat, targetScale = 0.86f) +
+                                        slideOutHorizontally(backOffset) { it / 4 } + fadeOut(backFade)
+                                )
+                                .apply { targetContentZIndex = -1f }
                         }
                     },
-                    label = "screen",
                 ) { current ->
-                    when (current) {
-                        Screen.HOME -> HomeScreen(
-                            viewModel = viewModel,
-                            onOpenSettings = { screen = Screen.SETTINGS },
-                        )
-                        Screen.SETTINGS -> SettingsScreen(
-                            viewModel = viewModel,
-                            onBack = { screen = Screen.HOME },
-                        )
+                    // The page rounds its corners as it leaves, like a card being put away.
+                    val corner by this.transition.animateDp(
+                        transitionSpec = { tween(BACK_MILLIS / 4, easing = LinearEasing) },
+                        label = "corner",
+                    ) {
+                        if (it == EnterExitState.PostExit) 40.dp else 0.dp
+                    }
+                    Box(Modifier.graphicsLayer {
+                        shape = RoundedCornerShape(corner)
+                        clip = corner > 0.dp
+                    }) {
+                        when (current) {
+                            Screen.HOME -> HomeScreen(
+                                viewModel = viewModel,
+                                onOpenSettings = { go(Screen.SETTINGS) },
+                            )
+                            Screen.SETTINGS -> SettingsScreen(
+                                viewModel = viewModel,
+                                onBack = { go(Screen.HOME) },
+                            )
+                        }
                     }
                 }
             }

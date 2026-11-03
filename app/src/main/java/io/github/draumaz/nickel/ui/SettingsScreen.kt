@@ -1,6 +1,5 @@
 package io.github.draumaz.nickel.ui
 
-import androidx.activity.compose.PredictiveBackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
@@ -58,7 +57,6 @@ import androidx.compose.material3.toShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -94,7 +92,6 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
-import kotlinx.coroutines.CancellationException
 
 @Composable
 fun SettingsScreen(viewModel: NickelViewModel, onBack: () -> Unit) {
@@ -119,28 +116,10 @@ fun SettingsScreen(viewModel: NickelViewModel, onBack: () -> Unit) {
         viewModel.shareExports.collect { ExportShare.share(context, it) }
     }
 
-    // Predictive back: the page shrinks and rounds off as the gesture progresses.
-    var backProgress by remember { mutableFloatStateOf(0f) }
-    PredictiveBackHandler { events ->
-        try {
-            events.collect { backProgress = it.progress }
-            onBack()
-        } catch (e: CancellationException) {
-            backProgress = 0f
-            throw e
-        }
-    }
-
+    // Predictive back is handled by MainActivity, which scrubs the transition back to Home.
     Scaffold(
         containerColor = MaterialTheme.colorScheme.surfaceContainer,
         snackbarHost = { SnackbarHost(snackbar) },
-        modifier = Modifier.graphicsLayer {
-            val scale = 1f - 0.08f * backProgress
-            scaleX = scale
-            scaleY = scale
-            shape = RoundedCornerShape(36.dp * backProgress)
-            clip = backProgress > 0f
-        },
     ) { padding ->
         Column(
             Modifier
