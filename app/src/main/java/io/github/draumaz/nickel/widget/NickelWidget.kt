@@ -8,6 +8,7 @@ import androidx.compose.ui.unit.sp
 import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
 import androidx.glance.GlanceTheme
+import androidx.glance.LocalContext
 import androidx.glance.LocalSize
 import androidx.glance.action.actionStartActivity
 import androidx.glance.action.clickable
@@ -29,6 +30,7 @@ import androidx.glance.layout.padding
 import androidx.glance.layout.width
 import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
+import androidx.glance.text.TextAlign
 import androidx.glance.text.TextStyle
 import io.github.draumaz.nickel.MainActivity
 import io.github.draumaz.nickel.data.Kind
@@ -81,6 +83,12 @@ private fun WidgetContent(netCents: Long, recent: List<Transaction>) {
         .coerceIn(0, recent.size)
     val compact = size.width < CompactWidth
 
+    // Too short for any rows: show the net total on its own, centered and sized to fit.
+    if (recent.isNotEmpty() && rows == 0) {
+        NetOnly(netCents)
+        return
+    }
+
     Column(
         modifier = GlanceModifier
             .fillMaxSize()
@@ -121,6 +129,51 @@ private fun WidgetContent(netCents: Long, recent: List<Transaction>) {
                 recent.take(rows).forEach { TransactionRow(it, showDate = !compact) }
             }
         }
+    }
+}
+
+/**
+ * Centered net total for widget sizes too short to show any transactions. The amount is sized
+ * from the space available and the length of the string, so long totals still fit on one line.
+ */
+@Composable
+private fun NetOnly(netCents: Long) {
+    val size = LocalSize.current
+    val fontScale = LocalContext.current.resources.configuration.fontScale
+    val amount = Money.formatSigned(netCents)
+
+    val horizontalPadding = 12f
+    val labelSize = 13f
+    // Bold digits run about 0.6em wide; leave a little slack for symbols and separators.
+    val byWidth = (size.width.value - 2 * horizontalPadding) / (amount.length * 0.62f)
+    // Keep room for the label and vertical padding.
+    val byHeight = (size.height.value - 2 * 10f - labelSize * 1.4f) / 1.3f
+    val amountSize = (minOf(byWidth, byHeight, 40f) / fontScale).coerceAtLeast(14f)
+
+    Column(
+        modifier = GlanceModifier
+            .fillMaxSize()
+            .background(GlanceTheme.colors.widgetBackground)
+            .cornerRadius(24.dp)
+            .padding(horizontal = horizontalPadding.dp, vertical = 10.dp)
+            .clickable(actionStartActivity<MainActivity>()),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            "Net",
+            style = TextStyle(color = GlanceTheme.colors.onSurfaceVariant, fontSize = labelSize.sp),
+        )
+        Text(
+            amount,
+            maxLines = 1,
+            style = TextStyle(
+                color = if (netCents > 0) IncomeColor else GlanceTheme.colors.onSurface,
+                fontSize = amountSize.sp,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center,
+            ),
+        )
     }
 }
 
