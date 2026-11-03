@@ -39,6 +39,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.Matrix
 import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.Shape
@@ -117,18 +119,64 @@ class MorphShape(
     }
 }
 
-@Composable
-fun toneContainer(tone: Tone): Color = when (tone) {
-    Tone.PRIMARY -> MaterialTheme.colorScheme.primaryContainer
-    Tone.SECONDARY -> MaterialTheme.colorScheme.secondaryContainer
-    Tone.TERTIARY -> MaterialTheme.colorScheme.tertiaryContainer
+/** A container/on-container pair for one hue, in dark and light variants. */
+private class HuePair(
+    val darkContainer: Long, val onDarkContainer: Long,
+    val lightContainer: Long, val onLightContainer: Long,
+)
+
+/**
+ * Twelve hues around the wheel. Both themes use bright pastel containers with dark icons
+ * (tone 80 in dark, 90 in light) so every badge pops against the surface.
+ */
+private val CategoryHues = listOf(
+    HuePair(0xFFFFB4AB, 0xFF690005, 0xFFFFDAD6, 0xFF410002), // 0 red
+    HuePair(0xFFFFB77C, 0xFF4A2800, 0xFFFFDCC2, 0xFF2E1500), // 1 orange
+    HuePair(0xFFF0C048, 0xFF3F2E00, 0xFFFFDF9E, 0xFF261A00), // 2 amber
+    HuePair(0xFFAED460, 0xFF1F3700, 0xFFC9F07A, 0xFF121F00), // 3 lime
+    HuePair(0xFF7FDA96, 0xFF003918, 0xFF9AF6B0, 0xFF00210B), // 4 green
+    HuePair(0xFF82D5CB, 0xFF003733, 0xFF9EF2E7, 0xFF00201D), // 5 teal
+    HuePair(0xFF5FD4FC, 0xFF003545, 0xFFB8EAFF, 0xFF001F28), // 6 cyan
+    HuePair(0xFFA9C7FF, 0xFF003063, 0xFFD6E3FF, 0xFF001B3E), // 7 blue
+    HuePair(0xFFC3C0FF, 0xFF241F70, 0xFFE2DFFF, 0xFF120A55), // 8 indigo
+    HuePair(0xFFDFB7FF, 0xFF4A1772, 0xFFF2DAFF, 0xFF2C0050), // 9 purple
+    HuePair(0xFFFFAAEE, 0xFF5B0F55, 0xFFFFD7F5, 0xFF380035), // 10 magenta
+    HuePair(0xFFFFB1C8, 0xFF650033, 0xFFFFD9E2, 0xFF3E001D), // 11 pink
+)
+
+/** Hand-picked hues for built-ins so neighbours in each list stay distinct. */
+private val BuiltInHues = mapOf(
+    "PAYCHECK" to 4, "SALARY" to 5, "FREELANCE" to 2, "INTEREST" to 3,
+    "GIFT" to 11, "REFUND" to 6, "OTHER_INCOME" to 7,
+    "GROCERIES" to 4, "DINING" to 1, "RENT" to 8, "UTILITIES" to 2, "TRANSPORT" to 7,
+    "MEDICAL" to 0, "SHOPPING" to 10, "ENTERTAINMENT" to 9, "SUBSCRIPTIONS" to 11,
+    "TRAVEL" to 6, "EDUCATION" to 8, "PETS" to 1, "NICOTINE" to 0, "INVESTMENTS" to 5,
+    "OTHER_EXPENSE" to 7,
+)
+
+private fun hueFor(category: Category): HuePair {
+    val index = BuiltInHues[category.id] ?: Math.floorMod(category.id.hashCode(), CategoryHues.size)
+    return CategoryHues[index]
 }
 
 @Composable
-fun onToneContainer(tone: Tone): Color = when (tone) {
-    Tone.PRIMARY -> MaterialTheme.colorScheme.onPrimaryContainer
-    Tone.SECONDARY -> MaterialTheme.colorScheme.onSecondaryContainer
-    Tone.TERTIARY -> MaterialTheme.colorScheme.onTertiaryContainer
+private fun isDarkScheme(): Boolean = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+
+/** The category's own colorful container, nudged slightly toward the theme so it sits in with dynamic color. */
+@Composable
+fun categoryContainer(category: Category): Color {
+    val hue = hueFor(category)
+    val dark = isDarkScheme()
+    val base = Color(if (dark) hue.darkContainer else hue.lightContainer)
+    // Wash toward white for a soft, pale pastel; the light-theme tints are already near it.
+    val pale = lerp(base, Color.White, if (dark) 0.45f else 0.3f)
+    return lerp(pale, MaterialTheme.colorScheme.primary, 0.05f)
+}
+
+@Composable
+fun onCategoryContainer(category: Category): Color {
+    val hue = hueFor(category)
+    return Color(if (isDarkScheme()) hue.onDarkContainer else hue.onLightContainer)
 }
 
 /**
@@ -143,8 +191,8 @@ fun CategoryBadge(
     size: Dp = 48.dp,
     shapeProgress: Float = 1f,
     shapeRotation: () -> Float = { 0f },
-    containerColor: Color = toneContainer(category.tone),
-    contentColor: Color = onToneContainer(category.tone),
+    containerColor: Color = categoryContainer(category),
+    contentColor: Color = onCategoryContainer(category),
 ) {
     val morph = remember(category) { Morph(MaterialShapes.Circle, category.shape) }
     val shape = remember(morph, shapeProgress) { MorphShape(morph, shapeProgress) }

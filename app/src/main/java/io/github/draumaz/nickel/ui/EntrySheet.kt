@@ -97,9 +97,9 @@ import io.github.draumaz.nickel.data.Money
 import io.github.draumaz.nickel.data.Transaction
 import io.github.draumaz.nickel.ui.components.CategoryBadge
 import io.github.draumaz.nickel.ui.components.PoppingText
-import io.github.draumaz.nickel.ui.components.onToneContainer
+import io.github.draumaz.nickel.ui.components.onCategoryContainer
 import io.github.draumaz.nickel.ui.components.rememberTimeFormatter
-import io.github.draumaz.nickel.ui.components.toneContainer
+import io.github.draumaz.nickel.ui.components.categoryContainer
 import io.github.draumaz.nickel.ui.theme.NickelTheme
 import java.time.Instant
 import java.time.LocalDate
@@ -612,12 +612,12 @@ internal fun CategoryChip(
     val rotation by animateFloatAsState(if (selected) 0f else -60f, spatial, label = "spin")
     val scale by animateFloatAsState(if (selected) 1.08f else 1f, spatial, label = "scale")
     val container by animateColorAsState(
-        if (selected) toneContainer(category.tone) else MaterialTheme.colorScheme.surfaceContainerHighest,
+        if (selected) categoryContainer(category) else MaterialTheme.colorScheme.surfaceContainerHighest,
         MaterialTheme.motionScheme.defaultEffectsSpec(),
         label = "container",
     )
     val content by animateColorAsState(
-        if (selected) onToneContainer(category.tone) else MaterialTheme.colorScheme.onSurfaceVariant,
+        if (selected) onCategoryContainer(category) else MaterialTheme.colorScheme.onSurfaceVariant,
         MaterialTheme.motionScheme.defaultEffectsSpec(),
         label = "content",
     )
