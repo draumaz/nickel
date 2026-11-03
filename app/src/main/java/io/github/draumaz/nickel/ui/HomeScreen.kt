@@ -113,6 +113,7 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.graphics.shapes.Morph
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import io.github.draumaz.nickel.BuildConfig
 import io.github.draumaz.nickel.R
 import io.github.draumaz.nickel.data.Category
 import io.github.draumaz.nickel.data.Kind
@@ -433,12 +434,15 @@ private fun ScallopFab(
 
 @Composable
 private fun Header(onOpenSettings: () -> Unit) {
-    val hour = LocalTime.now().hour
-    val greeting = when (hour) {
-        in 5..11 -> "Good morning"
-        in 12..16 -> "Good afternoon"
-        in 17..21 -> "Good evening"
-        else -> "Up late?"
+    val greeting = if (BuildConfig.DEBUG) {
+        "${BuildConfig.VERSION_NAME} (debug)"
+    } else {
+        when (LocalTime.now().hour) {
+            in 5..11 -> "Good morning"
+            in 12..16 -> "Good afternoon"
+            in 17..21 -> "Good evening"
+            else -> "Up late?"
+        }
     }
     ScreenHeader(
         title = "Nickel",
