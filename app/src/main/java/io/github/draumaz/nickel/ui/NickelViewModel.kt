@@ -192,6 +192,10 @@ class NickelViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch { repository.upsert(transaction) }
     }
 
+    fun addCategory(category: Category) {
+        viewModelScope.launch { repository.addCategory(category) }
+    }
+
     fun delete(transaction: Transaction) {
         viewModelScope.launch { repository.delete(transaction.id) }
     }

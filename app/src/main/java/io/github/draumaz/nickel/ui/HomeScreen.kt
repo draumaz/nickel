@@ -308,6 +308,7 @@ fun HomeScreen(viewModel: NickelViewModel, onOpenSettings: () -> Unit) {
             initialKind = kind,
             editing = editing,
             customCategories = state.customCategories,
+            onCreateCategory = viewModel::addCategory,
             onDismiss = {
                 sheetKind = null
                 editing = null

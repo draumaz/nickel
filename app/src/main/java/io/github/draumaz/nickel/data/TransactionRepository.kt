@@ -46,6 +46,12 @@ class TransactionRepository(context: Context) {
         ledger.copy(transactions = ledger.transactions.filterNot { it.id == id })
     }
 
+    /** Adds a user-made category; a category with the same id already saved is left alone. */
+    suspend fun addCategory(category: Category) = mutate { ledger ->
+        if (ledger.customCategories.any { it.id == category.id }) ledger
+        else ledger.copy(customCategories = ledger.customCategories + category)
+    }
+
     suspend fun import(plan: ImportPlan) = mutate { ledger ->
         val existingIds = ledger.customCategories.mapTo(HashSet()) { it.id }
         ledger.copy(

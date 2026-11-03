@@ -126,6 +126,9 @@ object CategoryIcons {
 
     fun get(key: String): ImageVector = icons[key] ?: Icons.Rounded.Category
 
+    /** Every icon key, in a stable order, for pickers. */
+    val keys: List<String> get() = icons.keys.toList()
+
     // Keyword hints for naming icons of imported categories. First match wins.
     private val hints = listOf(
         listOf("crypto", "bitcoin", "btc", "eth") to "bitcoin",

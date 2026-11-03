@@ -119,6 +119,7 @@ fun EntrySheet(
     initialKind: Kind,
     editing: Transaction?,
     customCategories: List<Category>,
+    onCreateCategory: (Category) -> Unit,
     onDismiss: () -> Unit,
     onSave: (Transaction) -> Unit,
     onDelete: (Transaction) -> Unit,
@@ -139,6 +140,7 @@ fun EntrySheet(
             initialKind = initialKind,
             editing = editing,
             customCategories = customCategories,
+            onCreateCategory = onCreateCategory,
             onSave = { close { onSave(it) } },
             onDelete = { close { onDelete(it) } },
         )
@@ -263,6 +265,7 @@ private fun EntryContent(
     initialKind: Kind,
     editing: Transaction?,
     customCategories: List<Category>,
+    onCreateCategory: (Category) -> Unit,
     onSave: (Transaction) -> Unit,
     onDelete: (Transaction) -> Unit,
 ) {
@@ -276,6 +279,7 @@ private fun EntryContent(
     var timestamp by rememberSaveable { mutableLongStateOf(editing?.timestamp ?: System.currentTimeMillis()) }
     var showDatePicker by remember { mutableStateOf(false) }
     var showTimePicker by remember { mutableStateOf(false) }
+    var showNewCategory by rememberSaveable { mutableStateOf(false) }
 
     val cents = Money.parseInput(input)
     val money = NickelTheme.money
@@ -372,6 +376,12 @@ private fun EntryContent(
                         haptics.performHapticFeedback(HapticFeedbackType.SegmentFrequentTick)
                         category = c
                     },
+                    modifier = Modifier.animateItem(),
+                )
+            }
+            item(key = "new") {
+                NewCategoryChip(
+                    onClick = { showNewCategory = true },
                     modifier = Modifier.animateItem(),
                 )
             }
@@ -493,6 +503,20 @@ private fun EntryContent(
                 )
             }
         }
+    }
+
+    if (showNewCategory) {
+        NewCategoryDialog(
+            kind = kind,
+            existing = Categories.forKind(kind, customCategories),
+            onDismiss = { showNewCategory = false },
+            onCreate = { created, isNew ->
+                haptics.performHapticFeedback(HapticFeedbackType.Confirm)
+                if (isNew) onCreateCategory(created)
+                category = created
+                showNewCategory = false
+            },
+        )
     }
 
     if (showDatePicker) {
