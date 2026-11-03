@@ -435,7 +435,7 @@ private fun ScallopFab(
 @Composable
 private fun Header(onOpenSettings: () -> Unit) {
     val greeting = if (BuildConfig.DEBUG) {
-        "${BuildConfig.VERSION_NAME} (debug)"
+        BuildConfig.VERSION_NAME
     } else {
         when (LocalTime.now().hour) {
             in 5..11 -> "Good morning"
