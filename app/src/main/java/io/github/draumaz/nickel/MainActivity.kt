@@ -11,6 +11,8 @@ import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.SeekableTransitionState
 import androidx.compose.animation.core.keyframes
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.animateDp
 import androidx.compose.animation.core.rememberTransition
 import androidx.compose.animation.scaleOut
@@ -45,6 +47,12 @@ private enum class Screen { HOME, SETTINGS }
 
 private const val BACK_MILLIS = 350
 
+/** Finishes or cancels the back transition: quick, with no bounce. Animates its fraction. */
+private val BackSettle = spring<Float>(
+    dampingRatio = Spring.DampingRatioNoBouncy,
+    stiffness = Spring.StiffnessMedium,
+)
+
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
@@ -71,7 +79,10 @@ class MainActivity : ComponentActivity() {
 
                 fun go(to: Screen) {
                     saved = to
-                    scope.launch { nav.animateTo(to) }
+                    scope.launch {
+                        // Going back runs the linear back transition, so ease it with the spring.
+                        if (to == Screen.HOME) nav.animateTo(to, BackSettle) else nav.animateTo(to)
+                    }
                 }
 
                 // Keyed off `saved`, not the transition: scrubbing retargets the transition to Home,
@@ -82,9 +93,12 @@ class MainActivity : ComponentActivity() {
                     try {
                         events.collect { nav.seekTo(it.progress, Screen.HOME) }
                         saved = Screen.HOME
-                        scope.launch { nav.animateTo(Screen.HOME) }
+                        // Settle with a quick spring from wherever the finger let go. Without a
+                        // spec the rest of the linear transition plays at full length, which
+                        // drags after a quick flick released early.
+                        scope.launch { nav.animateTo(Screen.HOME, BackSettle) }
                     } catch (e: CancellationException) {
-                        scope.launch { nav.animateTo(Screen.SETTINGS) }
+                        scope.launch { nav.animateTo(Screen.SETTINGS, BackSettle) }
                         throw e
                     }
                 }
