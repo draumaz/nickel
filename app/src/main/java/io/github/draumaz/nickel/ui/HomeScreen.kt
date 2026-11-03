@@ -85,6 +85,7 @@ import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.material3.toShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -145,6 +146,13 @@ fun HomeScreen(viewModel: NickelViewModel, onOpenSettings: () -> Unit) {
     val scope = rememberCoroutineScope()
     val snackbar = remember { SnackbarHostState() }
     val listState = rememberLazyListState()
+    // One clock turns every row's badge, rather than an infinite animation per row.
+    val badgeSpin = rememberInfiniteTransition(label = "badges")
+    val badgeTurn = badgeSpin.animateFloat(
+        0f, 360f,
+        infiniteRepeatable(tween(14_000, easing = LinearEasing)),
+        label = "badgeTurn",
+    )
 
     // Hide the add button while scrolling down through the list; bring it back on any
     // upward scroll or at the top.
@@ -289,6 +297,7 @@ fun HomeScreen(viewModel: NickelViewModel, onOpenSettings: () -> Unit) {
                     }
                     else -> transactionList(
                         transactions = state.transactions,
+                        badgeTurn = badgeTurn,
                         onClick = {
                             editing = it
                             sheetKind = it.kind
@@ -326,6 +335,7 @@ fun HomeScreen(viewModel: NickelViewModel, onOpenSettings: () -> Unit) {
 
 private fun LazyListScope.transactionList(
     transactions: List<Transaction>,
+    badgeTurn: State<Float>,
     onClick: (Transaction) -> Unit,
     onDelete: (Transaction) -> Unit,
 ) {
@@ -339,6 +349,7 @@ private fun LazyListScope.transactionList(
             TransactionRow(
                 transaction = t,
                 shape = segmentShape(index, items.size),
+                badgeTurn = badgeTurn,
                 onClick = { onClick(t) },
                 onDelete = { onDelete(t) },
                 modifier = Modifier
@@ -749,15 +760,16 @@ private fun CategoryFilterCarousel(
     }
 }
 
+private val ThisYearDay = DateTimeFormatter.ofPattern("EEEE, MMM d")
+private val OtherYearDay = DateTimeFormatter.ofPattern("EEE, MMM d, yyyy")
+
 @Composable
 private fun DayHeader(day: LocalDate, netCents: Long, modifier: Modifier = Modifier) {
     val today = LocalDate.now()
     val label = when (day) {
         today -> "Today"
         today.minusDays(1) -> "Yesterday"
-        else -> day.format(
-            DateTimeFormatter.ofPattern(if (day.year == today.year) "EEEE, MMM d" else "EEE, MMM d, yyyy")
-        )
+        else -> day.format(if (day.year == today.year) ThisYearDay else OtherYearDay)
     }
     Row(
         modifier
@@ -784,6 +796,7 @@ private fun DayHeader(day: LocalDate, netCents: Long, modifier: Modifier = Modif
 private fun TransactionRow(
     transaction: Transaction,
     shape: RoundedCornerShape,
+    badgeTurn: State<Float>,
     onClick: () -> Unit,
     onDelete: () -> Unit,
     modifier: Modifier = Modifier,
@@ -797,12 +810,6 @@ private fun TransactionRow(
     // The same slow turn as the add button and coin, started at a different angle per row
     // so neighbouring shapes don't spin in lockstep.
     val phase = remember(transaction.id) { (transaction.id % 360).toFloat() }
-    val spin = rememberInfiniteTransition(label = "badge")
-    val badgeRotation = spin.animateFloat(
-        phase, phase + 360f,
-        infiniteRepeatable(tween(14_000, easing = LinearEasing)),
-        label = "badgeRotation",
-    )
 
     SwipeToDismissBox(
         state = dismissState,
@@ -850,7 +857,7 @@ private fun TransactionRow(
                 Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                CategoryBadge(transaction.category, size = 44.dp, shapeRotation = { badgeRotation.value })
+                CategoryBadge(transaction.category, size = 44.dp, shapeRotation = { phase + badgeTurn.value })
                 Spacer(Modifier.width(16.dp))
                 Column(Modifier.weight(1f)) {
                     Text(

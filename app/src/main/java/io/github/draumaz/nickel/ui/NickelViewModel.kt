@@ -30,6 +30,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -138,7 +139,11 @@ class NickelViewModel(app: Application) : AndroidViewModel(app) {
             isEmpty = all.isEmpty(),
             count = all.size,
         )
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, HomeState())
+    }
+        // Filtering, totals and summaries walk the whole ledger, which gets long after an
+        // import: keep that off the main thread so filter taps don't drop frames.
+        .flowOn(Dispatchers.Default)
+        .stateIn(viewModelScope, SharingStarted.Eagerly, HomeState())
 
     init {
         viewModelScope.launch { repository.load() }

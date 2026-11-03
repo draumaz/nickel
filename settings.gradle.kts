@@ -24,3 +24,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "Nickel"
 include(":app")
+include(":baselineprofile")

@@ -63,8 +63,10 @@ class TransactionRepository(context: Context) {
     private suspend fun mutate(block: (Ledger) -> Ledger) {
         writeLock.withLock {
             val current = _ledger.value ?: Ledger(emptyList(), emptyList())
-            val next = block(current).let { l ->
-                l.copy(transactions = l.transactions.sortedByDescending { it.timestamp })
+            val next = withContext(Dispatchers.Default) {
+                block(current).let { l ->
+                    l.copy(transactions = l.transactions.sortedByDescending { it.timestamp })
+                }
             }
             _ledger.value = next
             withContext(Dispatchers.IO) { write(next) }

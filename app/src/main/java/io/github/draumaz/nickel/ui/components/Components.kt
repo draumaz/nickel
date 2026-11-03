@@ -32,9 +32,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.key
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Size
@@ -71,9 +69,11 @@ fun RollingText(
     color: Color,
     modifier: Modifier = Modifier,
 ) {
-    var previous by remember { mutableStateOf(text) }
-    val rollUp = remember(text) { compareMagnitude(text, previous) >= 0 }
-    previous = text
+    // A plain holder rather than snapshot state: writing state during composition would
+    // recompose the whole row of digits a second time on every change.
+    val previous = remember { PreviousText(text) }
+    val rollUp = remember(text) { compareMagnitude(text, previous.value) >= 0 }
+    previous.value = text
 
     val spatial = MaterialTheme.motionScheme.defaultSpatialSpec<IntOffset>()
     val effects = MaterialTheme.motionScheme.defaultEffectsSpec<Float>()
@@ -97,6 +97,8 @@ fun RollingText(
         }
     }
 }
+
+private class PreviousText(var value: String)
 
 private fun compareMagnitude(a: String, b: String): Int {
     fun value(s: String): Double {

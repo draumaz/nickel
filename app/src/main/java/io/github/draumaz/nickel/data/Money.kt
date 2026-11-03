@@ -26,11 +26,26 @@ object Money {
 
     // Always two decimals, whatever the currency's usual minor unit: amounts are stored and
     // typed in hundredths, so a yen total still shows the hundredths it was entered with.
+    // Building a NumberFormat is costly and every visible row formats a few amounts each
+    // composition, so keep one per thread (NumberFormat isn't thread-safe; the widget formats
+    // off the main thread) and rebuild it only when the locale or currency changes. Reading
+    // [currency] on every call keeps the snapshot read, so composables still recompose.
+    private class CachedFormat(val locale: Locale, val currency: Currency, val format: NumberFormat)
+
+    private val cachedFormat = ThreadLocal<CachedFormat>()
+
     private val format: NumberFormat
-        get() = NumberFormat.getCurrencyInstance(Locale.getDefault()).apply {
-            currency = this@Money.currency
-            minimumFractionDigits = 2
-            maximumFractionDigits = 2
+        get() {
+            val locale = Locale.getDefault()
+            val currency = currency
+            cachedFormat.get()?.let { if (it.locale == locale && it.currency == currency) return it.format }
+            val format = NumberFormat.getCurrencyInstance(locale).apply {
+                this.currency = currency
+                minimumFractionDigits = 2
+                maximumFractionDigits = 2
+            }
+            cachedFormat.set(CachedFormat(locale, currency, format))
+            return format
         }
 
     val symbol: String
