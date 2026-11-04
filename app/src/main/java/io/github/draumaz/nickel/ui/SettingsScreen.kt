@@ -1,5 +1,9 @@
 package io.github.draumaz.nickel.ui
 
+import android.content.Context
+import android.content.Intent
+import android.provider.Settings
+import androidx.core.app.NotificationManagerCompat
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
@@ -35,6 +39,7 @@ import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.CurrencyExchange
 import androidx.compose.material.icons.rounded.Download
+import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Upload
 import androidx.compose.material3.BasicAlertDialog
@@ -56,6 +61,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.toShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.LaunchedEffect
@@ -67,6 +73,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -83,6 +90,9 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import io.github.draumaz.nickel.R
 import io.github.draumaz.nickel.data.ImportPlan
 import io.github.draumaz.nickel.data.Kind
@@ -190,6 +200,9 @@ fun SettingsScreen(viewModel: NickelViewModel, onBack: () -> Unit) {
                     },
                 )
             }
+
+            SectionLabel("Automation")
+            NotificationAccessRow(viewModel, settings.autoAddNotices, haptics)
 
             SectionLabel("Your data")
             SettingRow(
@@ -322,6 +335,46 @@ private fun SettingRow(
         }
     }
 }
+
+/**
+ * Notification access is granted outside the app, so the switch mirrors reality on every
+ * resume: switching on without access opens Android's notification-access screen and only
+ * reads as on once the user actually grants it there.
+ */
+@Composable
+private fun NotificationAccessRow(viewModel: NickelViewModel, autoAdd: Boolean, haptics: HapticFeedback) {
+    val context = LocalContext.current
+    var hasAccess by remember { mutableStateOf(hasListenerAccess(context)) }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) hasAccess = hasListenerAccess(context)
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+    SettingRow(
+        icon = Icons.Rounded.Notifications,
+        iconShape = MaterialShapes.Cookie6Sided,
+        title = "Auto-add from notifications",
+        subtitle = if (hasAccess) "Watch payment and bank alerts for amounts"
+        else "Allow notification access in Android settings",
+        shape = segmentShape(0, 1),
+        checked = autoAdd && hasAccess,
+        onCheckedChange = { enabled ->
+            haptics.performHapticFeedback(
+                if (enabled) HapticFeedbackType.ToggleOn else HapticFeedbackType.ToggleOff
+            )
+            viewModel.setAutoAddNotices(enabled)
+            if (enabled && !hasAccess) {
+                context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+            }
+        },
+    )
+}
+
+private fun hasListenerAccess(context: Context): Boolean =
+    NotificationManagerCompat.getEnabledListenerPackages(context).contains(context.packageName)
 
 /** Swatches of the live palette, so toggling dynamic color has something to watch. */
 @Composable

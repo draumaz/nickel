@@ -11,6 +11,8 @@ data class Settings(
     val dynamicColor: Boolean,
     /** ISO 4217 code, or `null` to follow the system locale. */
     val currencyCode: String?,
+    /** Add transactions parsed out of payment and bank notifications. */
+    val autoAddNotices: Boolean,
 )
 
 class SettingsRepository(context: Context) {
@@ -22,6 +24,7 @@ class SettingsRepository(context: Context) {
         Settings(
             dynamicColor = prefs.getBoolean(KEY_DYNAMIC_COLOR, dynamicColorSupported),
             currencyCode = prefs.getString(KEY_CURRENCY, null),
+            autoAddNotices = prefs.getBoolean(KEY_AUTO_ADD_NOTICES, false),
         )
     )
     val settings: StateFlow<Settings> = _settings.asStateFlow()
@@ -47,8 +50,14 @@ class SettingsRepository(context: Context) {
         _settings.value = _settings.value.copy(dynamicColor = enabled)
     }
 
+    fun setAutoAddNotices(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_AUTO_ADD_NOTICES, enabled).apply()
+        _settings.value = _settings.value.copy(autoAddNotices = enabled)
+    }
+
     private companion object {
         const val KEY_DYNAMIC_COLOR = "dynamic_color"
         const val KEY_CURRENCY = "currency"
+        const val KEY_AUTO_ADD_NOTICES = "auto_add_notices"
     }
 }

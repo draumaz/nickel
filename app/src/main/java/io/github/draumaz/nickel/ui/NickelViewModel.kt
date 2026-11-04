@@ -183,6 +183,8 @@ class NickelViewModel(app: Application) : AndroidViewModel(app) {
 
     fun setDynamicColor(enabled: Boolean) = settingsRepository.setDynamicColor(enabled)
 
+    fun setAutoAddNotices(enabled: Boolean) = settingsRepository.setAutoAddNotices(enabled)
+
     fun setCurrency(code: String?) {
         settingsRepository.setCurrency(code)
         viewModelScope.launch { runCatching { NickelWidget().updateAll(getApplication()) } }
@@ -196,6 +198,17 @@ class NickelViewModel(app: Application) : AndroidViewModel(app) {
             delay(700)
             _refreshing.value = false
         }
+    }
+
+    /**
+     * Quiet re-read of the ledger on every return to the foreground: the notification
+     * listener writes to the same files while the app sits in the background, and without
+     * this the captured transactions only show after a restart or a manual refresh. Unlike
+     * [refresh] there's no spinner, and an unchanged ledger never re-emits, so the widget
+     * isn't told to redraw either.
+     */
+    fun syncLedger() {
+        viewModelScope.launch { repository.load() }
     }
 
     fun save(transaction: Transaction) {

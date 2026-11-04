@@ -36,6 +36,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.unit.IntOffset
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.draumaz.nickel.ui.HomeScreen
@@ -60,6 +62,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             val viewModel: NickelViewModel = viewModel()
             val settings by viewModel.settings.collectAsStateWithLifecycle()
+            LifecycleEventEffect(Lifecycle.Event.ON_START) { viewModel.syncLedger() }
             NickelTheme(dynamicColor = settings.dynamicColor) {
                 // Survives recreation; the seekable state below drives the animation.
                 var saved by rememberSaveable { mutableStateOf(Screen.HOME) }

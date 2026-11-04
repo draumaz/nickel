@@ -1,5 +1,6 @@
 <resources>
     <string name="app_name">Nickel</string>
+    <string name="notice_listener_name">Nickel transaction capture</string>
     <string name="widget_name">Balance</string>
     <string name="widget_description">Your net total and latest transactions</string>
 </resources>
