@@ -1,7 +1,9 @@
 package io.github.draumaz.nickel.ui
 
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.provider.Settings
 import androidx.core.app.NotificationManagerCompat
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -98,6 +100,7 @@ import io.github.draumaz.nickel.data.ImportPlan
 import io.github.draumaz.nickel.data.Kind
 import io.github.draumaz.nickel.data.Money
 import io.github.draumaz.nickel.export.ExportShare
+import io.github.draumaz.nickel.notices.NickelNoticeListener
 import io.github.draumaz.nickel.ui.components.CategoryBadge
 import io.github.draumaz.nickel.ui.components.ScreenHeader
 import io.github.draumaz.nickel.ui.components.pressScale
@@ -365,9 +368,13 @@ private fun NotificationAccessRow(viewModel: NickelViewModel, autoAdd: Boolean, 
             haptics.performHapticFeedback(
                 if (enabled) HapticFeedbackType.ToggleOn else HapticFeedbackType.ToggleOff
             )
+            // Re-query at tap time: hasAccess only refreshes on resume, so an access revoke
+            // that happens while the app sits in the foreground (adb, another grant screen)
+            // would leave it stale-true and this navigation would never fire.
+            hasAccess = hasListenerAccess(context)
             viewModel.setAutoAddNotices(enabled)
             if (enabled && !hasAccess) {
-                context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+                openNotificationAccess(context)
             }
         },
     )
@@ -375,6 +382,25 @@ private fun NotificationAccessRow(viewModel: NickelViewModel, autoAdd: Boolean, 
 
 private fun hasListenerAccess(context: Context): Boolean =
     NotificationManagerCompat.getEnabledListenerPackages(context).contains(context.packageName)
+
+/**
+ * Android 11+ can open the per-app page for Nickel's own listener, one switch away from a
+ * grant, instead of dropping the user into the full notification-access list. Older builds,
+ * and OEMs that strip the detail activity, fall back to the list.
+ */
+private fun openNotificationAccess(context: Context) {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+        context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+        return
+    }
+    val detail = Intent(Settings.ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS)
+        .putExtra(
+            Settings.EXTRA_NOTIFICATION_LISTENER_COMPONENT_NAME,
+            ComponentName(context, NickelNoticeListener::class.java).flattenToString(),
+        )
+    runCatching { context.startActivity(detail) }
+        .onFailure { context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) }
+}
 
 /** Swatches of the live palette, so toggling dynamic color has something to watch. */
 @Composable
