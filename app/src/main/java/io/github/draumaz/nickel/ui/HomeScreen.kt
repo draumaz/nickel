@@ -452,7 +452,7 @@ private fun Header(onOpenSettings: () -> Unit) {
             in 5..11 -> "Good morning"
             in 12..16 -> "Good afternoon"
             in 17..21 -> "Good evening"
-            else -> "Up late?"
+            else -> "Good evening"
         }
     }
     ScreenHeader(
