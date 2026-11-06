@@ -40,7 +40,7 @@ object ExportShare {
         }
 
         val save = SaveExportActivity.intent(context, file)
-        val chooser = Intent.createChooser(send, "Export ${file.name}")
+        val chooser = Intent.createChooser(send, context.getString(R.string.export_chooser, file.name))
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             // Android 14+ shows custom actions as buttons along the top of the share sheet.
             val pending = PendingIntent.getActivity(
@@ -48,7 +48,7 @@ object ExportShare {
             )
             val action = ChooserAction.Builder(
                 Icon.createWithResource(context, R.drawable.ic_save_file),
-                "Save to files",
+                context.getString(R.string.save_to_files),
                 pending,
             ).build()
             chooser.putExtra(Intent.EXTRA_CHOOSER_CUSTOM_ACTIONS, arrayOf(action))

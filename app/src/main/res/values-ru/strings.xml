@@ -1,0 +1,188 @@
+<resources>
+    <string name="notice_listener_name">Nickel: учёт операций из уведомлений</string>
+    <string name="widget_name">Баланс</string>
+    <string name="widget_description">Итог и последние операции</string>
+
+    <!-- Shared -->
+    <string name="ok">ОК</string>
+    <string name="cancel">Отмена</string>
+    <string name="done">Готово</string>
+    <string name="delete">Удалить</string>
+    <string name="undo">Отменить</string>
+    <string name="back">Назад</string>
+    <string name="settings">Настройки</string>
+    <string name="today">Сегодня</string>
+    <string name="yesterday">Вчера</string>
+    <string name="kind_expense">Расход</string>
+    <string name="kind_income">Доход</string>
+    <string name="dot_pair">%1$s · %2$s</string>
+    <string name="date_range">%1$s – %2$s</string>
+
+    <!-- Home -->
+    <string name="greeting_morning">Доброе утро</string>
+    <string name="greeting_afternoon">Добрый день</string>
+    <string name="greeting_evening">Добрый вечер</string>
+    <string name="add_transaction">Добавить операцию</string>
+    <string name="deleted_item">Удалено: %1$s</string>
+    <string name="duplicate">Дублировать</string>
+    <string name="empty_ledger_title">Здесь пока пусто</string>
+    <string name="empty_ledger_body">Нажмите +, чтобы записать первый расход или доход.</string>
+    <string name="no_income_yet">Доходов пока нет</string>
+    <string name="no_expenses_yet">Расходов пока нет</string>
+    <string name="empty_filter_body">Тут ничего нет, и это, честно говоря, даже приятно.</string>
+    <string name="net_total">Итого</string>
+    <string name="income_from">Доход: %1$s</string>
+    <string name="spent_on">Расходы: %1$s</string>
+    <string name="total_income">Всего доходов</string>
+    <string name="total_spent">Всего расходов</string>
+    <string name="money_in">Приход</string>
+    <string name="money_out">Расход</string>
+    <string name="this_month">Этот месяц</string>
+    <string name="last_month">Прошлый месяц</string>
+    <string name="of_income">От доходов</string>
+    <string name="of_spending">От расходов</string>
+    <string name="percent">%1$d %%</string>
+    <string name="filter_all">Все</string>
+    <string name="filter_expenses">Расходы</string>
+    <string name="filter_income">Доходы</string>
+
+    <!-- Entry sheet -->
+    <string name="add_note">Добавить заметку</string>
+    <string name="save_changes">Сохранить</string>
+    <string name="add_income">Добавить доход</string>
+    <string name="add_expense">Добавить расход</string>
+    <string name="time">Время</string>
+    <string name="change_date">Изменить дату</string>
+    <string name="change_time">Изменить время</string>
+    <string name="backspace">Стереть</string>
+    <string name="double_zero">Два нуля</string>
+
+    <!-- New category -->
+    <string name="new_category">Новая категория</string>
+    <string name="new_short">Новая</string>
+    <string name="new_income_category">Новая категория доходов</string>
+    <string name="new_expense_category">Новая категория расходов</string>
+    <string name="name">Название</string>
+    <string name="category_exists">«%1$s» уже есть, она будет выбрана</string>
+    <string name="icon">Значок</string>
+    <string name="use_existing">Выбрать её</string>
+    <string name="create">Создать</string>
+
+    <!-- Settings -->
+    <string name="settings_subtitle">Настройте Nickel под себя</string>
+    <string name="section_appearance">Оформление</string>
+    <string name="dynamic_color">Динамические цвета</string>
+    <string name="dynamic_color_on">Цвета из ваших обоев</string>
+    <string name="dynamic_color_unsupported">Нужен Android 12 или новее</string>
+    <string name="section_money">Деньги</string>
+    <string name="currency">Валюта</string>
+    <string name="system_default">Как в системе</string>
+    <string name="system_default_currency">Как в системе · %1$s</string>
+    <string name="section_automation">Автоматизация</string>
+    <string name="auto_add">Добавлять из уведомлений</string>
+    <string name="auto_add_on">Находить суммы в уведомлениях банков и платёжных сервисов</string>
+    <string name="auto_add_needs_access">Разрешите доступ к уведомлениям в настройках Android</string>
+    <string name="section_data">Ваши данные</string>
+    <string name="import_csv">Импорт из CSV</string>
+    <string name="import_csv_subtitle">Перенесите операции из Dime или таблицы</string>
+    <string name="export_csv">Экспорт в CSV</string>
+    <string name="export_nothing">Пока нечего экспортировать</string>
+    <plurals name="export_subtitle">
+        <item quantity="one">Отправить или сохранить %d операцию в CSV-файл</item>
+        <item quantity="few">Отправить или сохранить %d операции в CSV-файл</item>
+        <item quantity="many">Отправить или сохранить %d операций в CSV-файл</item>
+        <item quantity="other">Отправить или сохранить %d операции в CSV-файл</item>
+    </plurals>
+    <string name="about_version">, 1.0</string>
+    <string name="about_by">автор: %1$s</string>
+    <string name="currency_dialog_body">Меняет только символ, с которым показываются суммы. Суммы не пересчитываются.</string>
+    <string name="search">Поиск</string>
+    <string name="currency_selected">Выбрано</string>
+
+    <!-- Import and export -->
+    <string name="import_reading">Читаем файл…</string>
+    <string name="import_busy">Раскладываем всё по местам…</string>
+    <string name="import_failed">Не удалось импортировать</string>
+    <string name="already_imported">Уже импортировано</string>
+    <plurals name="already_imported_body">
+        <item quantity="one">%1$d операция из файла «%2$s» уже есть в Nickel.</item>
+        <item quantity="few">Все %1$d операции из файла «%2$s» уже есть в Nickel.</item>
+        <item quantity="many">Все %1$d операций из файла «%2$s» уже есть в Nickel.</item>
+        <item quantity="other">Все %1$d операции из файла «%2$s» уже есть в Nickel.</item>
+    </plurals>
+    <string name="this_file">этот файл</string>
+    <plurals name="import_question">
+        <item quantity="one">Импортировать %d операцию?</item>
+        <item quantity="few">Импортировать %d операции?</item>
+        <item quantity="many">Импортировать %d операций?</item>
+        <item quantity="other">Импортировать %d операции?</item>
+    </plurals>
+    <plurals name="expense_count">
+        <item quantity="one">%d расход</item>
+        <item quantity="few">%d расхода</item>
+        <item quantity="many">%d расходов</item>
+        <item quantity="other">%d расхода</item>
+    </plurals>
+    <plurals name="income_count">
+        <item quantity="one">%d доход</item>
+        <item quantity="few">%d дохода</item>
+        <item quantity="many">%d доходов</item>
+        <item quantity="other">%d дохода</item>
+    </plurals>
+    <string name="skip_duplicates">уже в Nickel: %d</string>
+    <string name="skip_unreadable">не прочитано: %d</string>
+    <string name="skipping">Пропущено (%1$s)</string>
+    <string name="skipping_both">Пропущено (%1$s; %2$s)</string>
+    <string name="new_categories">Новые категории</string>
+    <string name="import_action">Импортировать</string>
+    <plurals name="imported_count">
+        <item quantity="one">Импортирована %d операция</item>
+        <item quantity="few">Импортировано %d операции</item>
+        <item quantity="many">Импортировано %d операций</item>
+        <item quantity="other">Импортировано %d операции</item>
+    </plurals>
+    <string name="import_open_failed">Не удалось открыть файл.</string>
+    <string name="import_no_transactions">В этом файле нет операций.</string>
+    <string name="import_unreadable">Похоже, этот CSV-файл Nickel прочитать не может.</string>
+    <string name="import_empty_file">Файл пустой.</string>
+    <string name="import_no_columns">В файле не найдены столбцы с датой и суммой.</string>
+    <string name="export_failed">Не удалось подготовить экспорт</string>
+    <string name="export_chooser">Экспорт %1$s</string>
+    <string name="save_to_files">Сохранить в файлы</string>
+    <string name="saved_file">Сохранено: %1$s</string>
+    <string name="save_failed">Не удалось сохранить файл</string>
+
+    <!-- Widget -->
+    <string name="widget_net">Итого</string>
+    <string name="widget_empty">Операций пока нет</string>
+
+    <!-- Notification capture -->
+    <string name="channel_captured">Добавленные операции</string>
+    <string name="channel_captured_description">Сообщает, когда операция из уведомления о платеже добавлена в журнал</string>
+    <string name="transaction_added">Операция добавлена</string>
+    <string name="source_text_message">SMS</string>
+
+    <!-- Built-in categories -->
+    <string name="category_paycheck">Зарплата</string>
+    <string name="category_salary">Оклад</string>
+    <string name="category_freelance">Фриланс</string>
+    <string name="category_interest">Проценты</string>
+    <string name="category_gift">Подарок</string>
+    <string name="category_refund">Возврат</string>
+    <string name="category_other_income">Другое</string>
+    <string name="category_groceries">Продукты</string>
+    <string name="category_dining">Кафе</string>
+    <string name="category_rent">Аренда</string>
+    <string name="category_utilities">ЖКХ</string>
+    <string name="category_transport">Транспорт</string>
+    <string name="category_medical">Здоровье</string>
+    <string name="category_shopping">Покупки</string>
+    <string name="category_entertainment">Развлечения</string>
+    <string name="category_subscriptions">Подписки</string>
+    <string name="category_travel">Путешествия</string>
+    <string name="category_education">Образование</string>
+    <string name="category_pets">Питомцы</string>
+    <string name="category_nicotine">Никотин</string>
+    <string name="category_investments">Инвестиции</string>
+    <string name="category_other_expense">Другое</string>
+</resources>

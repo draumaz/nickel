@@ -1,5 +1,9 @@
 package io.github.draumaz.nickel.ui
 
+import androidx.compose.ui.platform.LocalResources
+import io.github.draumaz.nickel.ui.components.localizedDateFormat
+import io.github.draumaz.nickel.ui.components.displayLabel
+import androidx.compose.ui.res.stringResource
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
@@ -133,7 +137,6 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
-import java.time.format.DateTimeFormatter
 import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
 
@@ -144,6 +147,7 @@ fun HomeScreen(viewModel: NickelViewModel, onOpenSettings: () -> Unit) {
     val refreshing by viewModel.refreshing.collectAsStateWithLifecycle()
     val haptics = LocalHapticFeedback.current
     val context = LocalContext.current
+    val resources = LocalResources.current
     val scope = rememberCoroutineScope()
     val snackbar = remember { SnackbarHostState() }
     val listState = rememberLazyListState()
@@ -189,8 +193,8 @@ fun HomeScreen(viewModel: NickelViewModel, onOpenSettings: () -> Unit) {
         scope.launch {
             snackbar.currentSnackbarData?.dismiss()
             val result = snackbar.showSnackbar(
-                message = "Deleted ${t.note.ifBlank { t.category.label }}",
-                actionLabel = "Undo",
+                message = resources.getString(R.string.deleted_item, t.note.ifBlank { t.category.displayLabel(resources) }),
+                actionLabel = resources.getString(R.string.undo),
                 withDismissAction = false,
                 duration = SnackbarDuration.Long,
             )
@@ -287,15 +291,15 @@ fun HomeScreen(viewModel: NickelViewModel, onOpenSettings: () -> Unit) {
                 when {
                     state.isEmpty -> item(key = "empty", contentType = "empty") {
                         EmptyState(
-                            title = "Your ledger is empty",
-                            body = "Tap + to log your first expense or income.",
+                            title = stringResource(R.string.empty_ledger_title),
+                            body = stringResource(R.string.empty_ledger_body),
                             modifier = Modifier.animateItem(),
                         )
                     }
                     state.transactions.isEmpty() -> item(key = "none", contentType = "empty") {
                         EmptyState(
-                            title = if (state.filter == Filter.INCOME) "No income yet" else "No expenses yet",
-                            body = "Nothing to see here, which is honestly kind of nice.",
+                            title = stringResource(if (state.filter == Filter.INCOME) R.string.no_income_yet else R.string.no_expenses_yet),
+                            body = stringResource(R.string.empty_filter_body),
                             modifier = Modifier.animateItem(),
                         )
                     }
@@ -423,6 +427,7 @@ private fun ScallopFab(
     val pressed by interaction.collectIsPressedAsState()
     val scale by animateFloatAsState(if (pressed) 0.88f else 1f, fast, label = "fabPress")
 
+    val addLabel = stringResource(R.string.add_transaction)
     val morph = remember { Morph(MaterialShapes.Cookie12Sided, MaterialShapes.Circle) }
     Box(
         modifier
@@ -435,7 +440,7 @@ private fun ScallopFab(
                 role = Role.Button,
                 onClick = onClick,
             )
-            .semantics { contentDescription = "Add transaction" },
+            .semantics { contentDescription = addLabel },
         contentAlignment = Alignment.Center,
     ) {
         // Slightly see-through, so no shadow: one would show through as a dark disc. The icon
@@ -464,14 +469,13 @@ private fun Header(onOpenSettings: () -> Unit) {
         BuildConfig.VERSION_NAME
     } else {
         when (LocalTime.now().hour) {
-            in 5..11 -> "Good morning"
-            in 12..16 -> "Good afternoon"
-            in 17..21 -> "Good evening"
-            else -> "Good evening"
+            in 5..11 -> stringResource(R.string.greeting_morning)
+            in 12..16 -> stringResource(R.string.greeting_afternoon)
+            else -> stringResource(R.string.greeting_evening)
         }
     }
     ScreenHeader(
-        title = "Nickel",
+        title = stringResource(R.string.app_name),
         subtitle = greeting,
         leading = { CoinMark() },
         trailing = { SettingsButton(onOpenSettings) },
@@ -496,7 +500,7 @@ private fun SettingsButton(onClick: () -> Unit) {
     ) {
         Icon(
             Icons.Rounded.Settings,
-            contentDescription = "Settings",
+            contentDescription = stringResource(R.string.settings),
             modifier = Modifier.graphicsLayer { rotationZ = turn },
         )
     }
@@ -582,11 +586,12 @@ private fun HeroCard(totals: Totals, summary: FilterSummary?) {
             )
             Column(Modifier.padding(24.dp)) {
                 val title = when {
-                    summary == null -> "Net total"
-                    summary.category != null && summary.kind == Kind.INCOME -> "Income from ${summary.category.label}"
-                    summary.category != null -> "Spent on ${summary.category.label}"
-                    summary.kind == Kind.INCOME -> "Total income"
-                    else -> "Total spent"
+                    summary == null -> stringResource(R.string.net_total)
+                    summary.category != null && summary.kind == Kind.INCOME ->
+                        stringResource(R.string.income_from, summary.category.displayLabel())
+                    summary.category != null -> stringResource(R.string.spent_on, summary.category.displayLabel())
+                    summary.kind == Kind.INCOME -> stringResource(R.string.total_income)
+                    else -> stringResource(R.string.total_spent)
                 }
                 Crossfade(title, animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec(), label = "heroTitle") {
                     Text(
@@ -608,7 +613,7 @@ private fun HeroCard(totals: Totals, summary: FilterSummary?) {
                     if (summary == null) {
                         StatPill(
                             icon = Icons.AutoMirrored.Rounded.TrendingUp,
-                            label = "In",
+                            label = stringResource(R.string.money_in),
                             value = Money.format(totals.incomeCents),
                             container = money.incomeContainer,
                             content = money.onIncomeContainer,
@@ -616,7 +621,7 @@ private fun HeroCard(totals: Totals, summary: FilterSummary?) {
                         )
                         StatPill(
                             icon = Icons.AutoMirrored.Rounded.TrendingDown,
-                            label = "Out",
+                            label = stringResource(R.string.money_out),
                             value = Money.format(totals.expenseCents),
                             container = money.expenseContainer,
                             content = money.onExpenseContainer,
@@ -628,7 +633,7 @@ private fun HeroCard(totals: Totals, summary: FilterSummary?) {
                         val content = if (income) money.onIncomeContainer else money.onExpenseContainer
                         StatPill(
                             icon = Icons.Rounded.CalendarMonth,
-                            label = "This month",
+                            label = stringResource(R.string.this_month),
                             value = Money.format(summary.thisMonthCents),
                             container = container,
                             content = content,
@@ -638,8 +643,8 @@ private fun HeroCard(totals: Totals, summary: FilterSummary?) {
                         if (summary.share != null) {
                             StatPill(
                                 icon = Icons.Rounded.PieChart,
-                                label = if (income) "Of income" else "Of spending",
-                                value = "${(summary.share * 100).roundToInt()}%",
+                                label = stringResource(if (income) R.string.of_income else R.string.of_spending),
+                                value = stringResource(R.string.percent, (summary.share * 100).roundToInt()),
                                 container = container,
                                 content = content,
                                 modifier = Modifier.weight(1f),
@@ -647,7 +652,7 @@ private fun HeroCard(totals: Totals, summary: FilterSummary?) {
                         } else {
                             StatPill(
                                 icon = Icons.Rounded.History,
-                                label = "Last month",
+                                label = stringResource(R.string.last_month),
                                 value = Money.format(summary.lastMonthCents),
                                 container = container,
                                 content = content,
@@ -696,7 +701,11 @@ private fun StatPill(
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun FilterRow(selected: Filter, onSelect: (Filter) -> Unit) {
-    val options = listOf(Filter.ALL to "All", Filter.EXPENSE to "Expenses", Filter.INCOME to "Income")
+    val options = listOf(
+        Filter.ALL to stringResource(R.string.filter_all),
+        Filter.EXPENSE to stringResource(R.string.filter_expenses),
+        Filter.INCOME to stringResource(R.string.filter_income),
+    )
     Row(
         Modifier
             .fillMaxWidth()
@@ -775,16 +784,16 @@ private fun CategoryFilterCarousel(
     }
 }
 
-private val ThisYearDay = DateTimeFormatter.ofPattern("EEEE, MMM d")
-private val OtherYearDay = DateTimeFormatter.ofPattern("EEE, MMM d, yyyy")
 
 @Composable
 private fun DayHeader(day: LocalDate, netCents: Long, modifier: Modifier = Modifier) {
     val today = LocalDate.now()
     val label = when (day) {
-        today -> "Today"
-        today.minusDays(1) -> "Yesterday"
-        else -> day.format(if (day.year == today.year) ThisYearDay else OtherYearDay)
+        today -> stringResource(R.string.today)
+        today.minusDays(1) -> stringResource(R.string.yesterday)
+        else -> remember(day, today.year) {
+            day.format(localizedDateFormat(if (day.year == today.year) "EEEEMMMd" else "EEEyMMMd"))
+        }
     }
     Row(
         modifier
@@ -870,7 +879,7 @@ private fun TransactionRow(
             ) {
                 Icon(
                     if (cloning) Icons.Rounded.ContentCopy else Icons.Rounded.DeleteOutline,
-                    contentDescription = if (cloning) "Duplicate" else "Delete",
+                    contentDescription = stringResource(if (cloning) R.string.duplicate else R.string.delete),
                     tint = when {
                         cloning && active -> colors.onPrimary
                         cloning -> colors.onPrimaryContainer
@@ -899,14 +908,14 @@ private fun TransactionRow(
                 Spacer(Modifier.width(16.dp))
                 Column(Modifier.weight(1f)) {
                     Text(
-                        transaction.note.ifBlank { transaction.category.label },
+                        transaction.note.ifBlank { transaction.category.displayLabel() },
                         style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.onSurface,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
                     Text(
-                        if (transaction.note.isBlank()) time else "${transaction.category.label} · $time",
+                        if (transaction.note.isBlank()) time else stringResource(R.string.dot_pair, transaction.category.displayLabel(), time),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,

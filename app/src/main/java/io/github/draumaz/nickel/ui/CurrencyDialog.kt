@@ -1,5 +1,8 @@
 package io.github.draumaz.nickel.ui
 
+import androidx.compose.ui.platform.LocalConfiguration
+import io.github.draumaz.nickel.R
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -52,7 +55,7 @@ internal fun CurrencyDialog(
     onSelect: (code: String?) -> Unit,
 ) {
     var query by rememberSaveable { mutableStateOf("") }
-    val locale = Locale.getDefault()
+    val locale = LocalConfiguration.current.locales[0]
     // Only currencies some country uses today: going by locales drops historic ones
     // (Afghan Afghani 1927–2002) and accounting units (XUA, XBA) that the full list includes.
     val all = remember {
@@ -70,11 +73,11 @@ internal fun CurrencyDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Currency") },
+        title = { Text(stringResource(R.string.currency)) },
         text = {
             Column {
                 Text(
-                    "Changes the symbol amounts are shown with. Amounts aren't converted.",
+                    stringResource(R.string.currency_dialog_body),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -82,7 +85,7 @@ internal fun CurrencyDialog(
                 OutlinedTextField(
                     value = query,
                     onValueChange = { query = it.take(30) },
-                    placeholder = { Text("Search") },
+                    placeholder = { Text(stringResource(R.string.search)) },
                     leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = null) },
                     singleLine = true,
                     shape = RoundedCornerShape(16.dp),
@@ -94,7 +97,7 @@ internal fun CurrencyDialog(
                         item(key = "system") {
                             CurrencyOption(
                                 symbol = system.getSymbol(locale),
-                                title = "System default",
+                                title = stringResource(R.string.system_default),
                                 subtitle = currencyLabel(system),
                                 selected = selectedCode == null,
                                 onClick = { onSelect(null) },
@@ -113,7 +116,7 @@ internal fun CurrencyDialog(
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Done") } },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.done)) } },
     )
 }
 
@@ -155,7 +158,7 @@ private fun CurrencyOption(
         if (selected) {
             Icon(
                 Icons.Rounded.Check,
-                contentDescription = "Selected",
+                contentDescription = stringResource(R.string.currency_selected),
                 tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(22.dp),
             )

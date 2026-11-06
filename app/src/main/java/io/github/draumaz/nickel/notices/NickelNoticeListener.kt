@@ -78,14 +78,17 @@ class NickelNoticeListener : NotificationListenerService() {
                 // Notifications rarely name a category; drop them in "Other" and let
                 // the user reassign when they next open the app.
                 category = Categories.fallback(match.kind),
-                note = match.note,
+                note = localized(match.note),
                 timestamp = sbn.postTime,
             )
             repository.upsert(transaction)
             runCatching { NickelWidget().updateAll(applicationContext) }
-            notifyCaptured(transaction, match.source)
+            notifyCaptured(transaction, localized(match.source))
         }
     }
+
+    private fun localized(label: String) =
+        if (label == NoticeParser.SMS_SOURCE) getString(R.string.source_text_message) else label
 
     override fun onDestroy() {
         scope.cancel()
@@ -128,9 +131,9 @@ class NickelNoticeListener : NotificationListenerService() {
         manager.createNotificationChannel(
             NotificationChannel(
                 CHANNEL_ID,
-                "Captured transactions",
+                getString(R.string.channel_captured),
                 NotificationManager.IMPORTANCE_DEFAULT,
-            ).apply { description = "Alerts when a payment notification is added to the ledger" }
+            ).apply { description = getString(R.string.channel_captured_description) }
         )
 
         val notificationId = (transaction.id % Int.MAX_VALUE).toInt()
@@ -159,11 +162,11 @@ class NickelNoticeListener : NotificationListenerService() {
             notificationId,
             NotificationCompat.Builder(applicationContext, CHANNEL_ID)
                 .setSmallIcon(R.drawable.ic_notification)
-                .setContentTitle("Transaction added")
-                .setContentText("${Money.formatSigned(transaction.signedCents)} · $source")
+                .setContentTitle(getString(R.string.transaction_added))
+                .setContentText(getString(R.string.dot_pair, Money.formatSigned(transaction.signedCents), source))
                 .setSubText(transaction.note)
                 .setContentIntent(openApp)
-                .addAction(0, "Delete", undo)
+                .addAction(0, getString(R.string.delete), undo)
                 .setAutoCancel(true)
                 .setLocalOnly(true)
                 .build(),

@@ -3,7 +3,9 @@ package io.github.draumaz.nickel.ui
 import android.app.Application
 import android.net.Uri
 import android.provider.OpenableColumns
+import androidx.annotation.StringRes
 import androidx.glance.appwidget.updateAll
+import io.github.draumaz.nickel.R
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.draumaz.nickel.data.Categories
@@ -78,7 +80,7 @@ sealed interface TransferState {
     data object Reading : TransferState
     data class Preview(val plan: ImportPlan, val fileName: String?) : TransferState
     data object Importing : TransferState
-    data class Failed(val message: String) : TransferState
+    data class Failed(@StringRes val message: Int) : TransferState
 }
 
 class NickelViewModel(app: Application) : AndroidViewModel(app) {
@@ -233,7 +235,7 @@ class NickelViewModel(app: Application) : AndroidViewModel(app) {
                 runCatching {
                     val resolver = getApplication<Application>().contentResolver
                     val text = resolver.openInputStream(uri)?.use { it.readBytes().toString(Charsets.UTF_8) }
-                        ?: throw ImportException("Couldn't open that file.")
+                        ?: throw ImportException(ImportException.Reason.UNOPENABLE)
                     val ledger = repository.ledger.value
                     LedgerCsv.plan(text, ledger?.transactions.orEmpty(), ledger?.customCategories.orEmpty()) to
                         displayName(uri)
@@ -243,14 +245,19 @@ class NickelViewModel(app: Application) : AndroidViewModel(app) {
             _transfer.value = result.fold(
                 onSuccess = { (plan, name) ->
                     if (plan.transactions.isEmpty() && plan.duplicates == 0) {
-                        TransferState.Failed("No transactions found in that file.")
+                        TransferState.Failed(R.string.import_no_transactions)
                     } else {
                         TransferState.Preview(plan, name)
                     }
                 },
                 onFailure = { e ->
                     TransferState.Failed(
-                        (e as? ImportException)?.message ?: "That doesn't look like a CSV Nickel can read."
+                        when ((e as? ImportException)?.reason) {
+                            ImportException.Reason.UNOPENABLE -> R.string.import_open_failed
+                            ImportException.Reason.EMPTY_FILE -> R.string.import_empty_file
+                            ImportException.Reason.NO_COLUMNS -> R.string.import_no_columns
+                            null -> R.string.import_unreadable
+                        }
                     )
                 },
             )
@@ -266,7 +273,7 @@ class NickelViewModel(app: Application) : AndroidViewModel(app) {
             minimumShow.await()
             _transfer.value = TransferState.Idle
             val n = preview.plan.transactions.size
-            _messages.send("Imported $n transaction${if (n == 1) "" else "s"}")
+            _messages.send(getApplication<Application>().resources.getQuantityString(R.plurals.imported_count, n, n))
         }
     }
 
@@ -289,7 +296,7 @@ class NickelViewModel(app: Application) : AndroidViewModel(app) {
                     }
                 }.getOrNull()
             }
-            if (file != null) _shareExports.send(file) else _messages.send("Couldn't prepare the export")
+            if (file != null) _shareExports.send(file) else _messages.send(getApplication<Application>().getString(R.string.export_failed))
         }
     }
 

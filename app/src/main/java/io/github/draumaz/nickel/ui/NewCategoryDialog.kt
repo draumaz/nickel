@@ -1,5 +1,9 @@
 package io.github.draumaz.nickel.ui
 
+import androidx.compose.ui.platform.LocalContext
+import io.github.draumaz.nickel.ui.components.displayLabel
+import io.github.draumaz.nickel.R
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -62,7 +66,7 @@ internal fun NewCategoryChip(onClick: () -> Unit, modifier: Modifier = Modifier)
         modifier
             .width(76.dp)
             .clip(RoundedCornerShape(20.dp))
-            .clickable(onClickLabel = "New category", onClick = onClick)
+            .clickable(onClickLabel = stringResource(R.string.new_category), onClick = onClick)
             .padding(vertical = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
@@ -81,7 +85,7 @@ internal fun NewCategoryChip(onClick: () -> Unit, modifier: Modifier = Modifier)
         }
         Spacer(Modifier.height(6.dp))
         Text(
-            "New",
+            stringResource(R.string.new_short),
             style = MaterialTheme.typography.labelMedium,
             fontWeight = FontWeight.Medium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -105,9 +109,14 @@ internal fun NewCategoryDialog(
     var name by rememberSaveable { mutableStateOf("") }
     var pickedIcon by rememberSaveable { mutableStateOf<String?>(null) }
 
+    val context = LocalContext.current
+    val newLabel = stringResource(R.string.new_short)
     val label = name.trim()
-    val match = existing.firstOrNull { it.label.equals(label, ignoreCase = true) }
-    val preview = Categories.custom(label.ifEmpty { "New" }, kind).let { c ->
+    // Matches the translated name too, so typing "Продукты" finds the built-in Groceries.
+    val match = existing.firstOrNull {
+        it.label.equals(label, ignoreCase = true) || it.displayLabel(context).equals(label, ignoreCase = true)
+    }
+    val preview = Categories.custom(label.ifEmpty { newLabel }, kind).let { c ->
         c.copy(iconKey = pickedIcon ?: c.iconKey)
     }
     val canCreate = label.isNotEmpty()
@@ -124,15 +133,15 @@ internal fun NewCategoryDialog(
         icon = {
             CategoryBadge(category = preview, size = 64.dp)
         },
-        title = { Text(if (kind == Kind.INCOME) "New income category" else "New expense category") },
+        title = { Text(stringResource(if (kind == Kind.INCOME) R.string.new_income_category else R.string.new_expense_category)) },
         text = {
             Column {
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it.take(MAX_NAME) },
-                    label = { Text("Name") },
+                    label = { Text(stringResource(R.string.name)) },
                     singleLine = true,
-                    supportingText = match?.let { { Text("“${it.label}” already exists; it’ll be selected") } },
+                    supportingText = match?.let { { Text(stringResource(R.string.category_exists, it.displayLabel())) } },
                     keyboardOptions = KeyboardOptions(
                         capitalization = KeyboardCapitalization.Words,
                         imeAction = ImeAction.Done,
@@ -144,7 +153,7 @@ internal fun NewCategoryDialog(
                 )
                 Spacer(Modifier.height(12.dp))
                 Text(
-                    "Icon",
+                    stringResource(R.string.icon),
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -184,9 +193,9 @@ internal fun NewCategoryDialog(
         },
         confirmButton = {
             TextButton(onClick = ::create, enabled = canCreate) {
-                Text(if (match != null) "Use existing" else "Create", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(stringResource(if (match != null) R.string.use_existing else R.string.create), maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
     )
 }

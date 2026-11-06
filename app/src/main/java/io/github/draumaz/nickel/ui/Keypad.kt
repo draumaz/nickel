@@ -1,5 +1,7 @@
 package io.github.draumaz.nickel.ui
 
+import io.github.draumaz.nickel.R
+import androidx.compose.ui.res.stringResource
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -63,8 +65,8 @@ fun Keypad(
                         contentColor = if (isBackspace) MaterialTheme.colorScheme.onSecondaryContainer
                         else MaterialTheme.colorScheme.onSurface,
                         description = when (key) {
-                            '<' -> "Backspace"
-                            DOUBLE_ZERO -> "Double zero"
+                            '<' -> stringResource(R.string.backspace)
+                            DOUBLE_ZERO -> stringResource(R.string.double_zero)
                             else -> key.toString()
                         },
                         modifier = Modifier.weight(1f),

@@ -1,5 +1,11 @@
 package io.github.draumaz.nickel.ui
 
+import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.text.TextAutoSize
+import io.github.draumaz.nickel.ui.components.localizedDateFormat
+import io.github.draumaz.nickel.ui.components.displayLabel
+import io.github.draumaz.nickel.R
+import androidx.compose.ui.res.stringResource
 import android.text.format.DateFormat
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
@@ -342,7 +348,7 @@ private fun EntryContent(
                         contentDescription = null,
                     )
                     Spacer(Modifier.size(ToggleButtonDefaults.IconSpacing))
-                    Text(if (k == Kind.EXPENSE) "Expense" else "Income")
+                    Text(stringResource(if (k == Kind.EXPENSE) R.string.kind_expense else R.string.kind_income))
                 }
             }
         }
@@ -413,7 +419,7 @@ private fun EntryContent(
             TextField(
                 value = note,
                 onValueChange = { note = it.take(60) },
-                placeholder = { Text("Add a note") },
+                placeholder = { Text(stringResource(R.string.add_note)) },
                 singleLine = true,
                 shape = RoundedCornerShape(20.dp),
                 colors = TextFieldDefaults.colors(
@@ -489,7 +495,7 @@ private fun EntryContent(
                     ),
                     modifier = Modifier.size(64.dp),
                 ) {
-                    Icon(Icons.Rounded.DeleteOutline, contentDescription = "Delete")
+                    Icon(Icons.Rounded.DeleteOutline, contentDescription = stringResource(R.string.delete))
                 }
             }
             Button(
@@ -517,9 +523,9 @@ private fun EntryContent(
                 Spacer(Modifier.width(ButtonDefaults.iconSpacingFor(64.dp)))
                 Text(
                     when {
-                        editing != null -> "Save changes"
-                        kind == Kind.INCOME -> "Add income"
-                        else -> "Add expense"
+                        editing != null -> stringResource(R.string.save_changes)
+                        kind == Kind.INCOME -> stringResource(R.string.add_income)
+                        else -> stringResource(R.string.add_expense)
                     },
                     style = MaterialTheme.typography.titleMedium,
                 )
@@ -557,9 +563,9 @@ private fun EntryContent(
                         timestamp = picked.atTime(time).atZone(zone).toInstant().toEpochMilli()
                     }
                     showDatePicker = false
-                }) { Text("OK") }
+                }) { Text(stringResource(R.string.ok)) }
             },
-            dismissButton = { TextButton(onClick = { showDatePicker = false }) { Text("Cancel") } },
+            dismissButton = { TextButton(onClick = { showDatePicker = false }) { Text(stringResource(R.string.cancel)) } },
         ) {
             DatePicker(state = pickerState)
         }
@@ -575,7 +581,7 @@ private fun EntryContent(
         )
         TimePickerDialog(
             onDismissRequest = { showTimePicker = false },
-            title = { Text("Time") },
+            title = { Text(stringResource(R.string.time)) },
             confirmButton = {
                 TextButton(onClick = {
                     timestamp = dateTime
@@ -583,9 +589,9 @@ private fun EntryContent(
                         .toInstant()
                         .toEpochMilli()
                     showTimePicker = false
-                }) { Text("OK") }
+                }) { Text(stringResource(R.string.ok)) }
             },
-            dismissButton = { TextButton(onClick = { showTimePicker = false }) { Text("Cancel") } },
+            dismissButton = { TextButton(onClick = { showTimePicker = false }) { Text(stringResource(R.string.cancel)) } },
         ) {
             TimePicker(state = pickerState)
         }
@@ -605,7 +611,7 @@ private fun WhenPill(timestamp: Long, onPickDate: () -> Unit, onPickTime: () -> 
             Row(
                 Modifier
                     .fillMaxHeight()
-                    .clickable(onClickLabel = "Change date", onClick = onPickDate)
+                    .clickable(onClickLabel = stringResource(R.string.change_date), onClick = onPickDate)
                     .padding(start = 16.dp, end = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -620,7 +626,7 @@ private fun WhenPill(timestamp: Long, onPickDate: () -> Unit, onPickTime: () -> 
             Box(
                 Modifier
                     .fillMaxHeight()
-                    .clickable(onClickLabel = "Change time", onClick = onPickTime)
+                    .clickable(onClickLabel = stringResource(R.string.change_time), onClick = onPickTime)
                     .padding(start = 10.dp, end = 16.dp),
                 contentAlignment = Alignment.Center,
             ) {
@@ -633,14 +639,15 @@ private fun WhenPill(timestamp: Long, onPickDate: () -> Unit, onPickTime: () -> 
 private fun timeLabel(timestamp: Long, formatter: DateTimeFormatter): String =
     Instant.ofEpochMilli(timestamp).atZone(ZoneId.systemDefault()).format(formatter)
 
+@Composable
 private fun dayLabel(timestamp: Long): String {
     val zone = ZoneId.systemDefault()
     val date = Instant.ofEpochMilli(timestamp).atZone(zone).toLocalDate()
     val today = LocalDate.now(zone)
     return when (date) {
-        today -> "Today"
-        today.minusDays(1) -> "Yesterday"
-        else -> date.format(DateTimeFormatter.ofPattern(if (date.year == today.year) "MMM d" else "MMM d, yyyy"))
+        today -> stringResource(R.string.today)
+        today.minusDays(1) -> stringResource(R.string.yesterday)
+        else -> date.format(localizedDateFormat(if (date.year == today.year) "MMMd" else "yMMMd"))
     }
 }
 
@@ -699,13 +706,21 @@ internal fun CategoryChip(
             },
         )
         Spacer(Modifier.height(6.dp))
+        // Long names ("Subscriptions", "Развлечения") shrink to fit the chip's fixed width
+        // instead of truncating; the ellipsis only kicks in below a still-legible floor.
+        val labelStyle = MaterialTheme.typography.labelMedium
         Text(
-            category.label,
-            style = MaterialTheme.typography.labelMedium,
+            category.displayLabel(),
+            style = labelStyle,
             fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
             color = if (selected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
+            autoSize = TextAutoSize.StepBased(
+                minFontSize = 9.sp,
+                maxFontSize = labelStyle.fontSize,
+                stepSize = 0.25.sp,
+            ),
         )
     }
 }

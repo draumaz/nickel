@@ -1,5 +1,8 @@
 package io.github.draumaz.nickel.widget
 
+import io.github.draumaz.nickel.ui.components.localizedDateFormat
+import io.github.draumaz.nickel.ui.components.displayLabel
+import io.github.draumaz.nickel.R
 import android.content.Context
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
@@ -100,7 +103,7 @@ private fun WidgetContent(netCents: Long, recent: List<Transaction>) {
             .clickable(actionStartActivity<MainActivity>()),
     ) {
         Text(
-            "Net",
+            LocalContext.current.getString(R.string.widget_net),
             style = TextStyle(color = GlanceTheme.colors.onSurfaceVariant, fontSize = 13.sp),
         )
         Text(
@@ -116,7 +119,7 @@ private fun WidgetContent(netCents: Long, recent: List<Transaction>) {
         if (recent.isEmpty()) {
             Spacer(GlanceModifier.height(6.dp))
             Text(
-                "No transactions yet",
+                LocalContext.current.getString(R.string.widget_empty),
                 style = TextStyle(color = GlanceTheme.colors.onSurfaceVariant, fontSize = 13.sp),
             )
         } else if (rows > 0) {
@@ -163,7 +166,7 @@ private fun NetOnly(netCents: Long) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
-            "Net",
+            LocalContext.current.getString(R.string.widget_net),
             style = TextStyle(color = GlanceTheme.colors.onSurfaceVariant, fontSize = labelSize.sp),
         )
         Text(
@@ -179,7 +182,6 @@ private fun NetOnly(netCents: Long) {
     }
 }
 
-private val dateFormat = DateTimeFormatter.ofPattern("MMM d", Locale.getDefault())
 
 @Composable
 private fun TransactionRow(transaction: Transaction, showDate: Boolean) {
@@ -188,7 +190,7 @@ private fun TransactionRow(transaction: Transaction, showDate: Boolean) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
-            transaction.note.ifBlank { transaction.category.label },
+            transaction.note.ifBlank { transaction.category.displayLabel(LocalContext.current) },
             maxLines = 1,
             modifier = GlanceModifier.defaultWeight(),
             style = TextStyle(color = GlanceTheme.colors.onSecondaryContainer, fontSize = 14.sp),
@@ -196,7 +198,7 @@ private fun TransactionRow(transaction: Transaction, showDate: Boolean) {
         if (showDate) {
             Spacer(GlanceModifier.width(8.dp))
             Text(
-                dateFormat.format(Instant.ofEpochMilli(transaction.timestamp).atZone(ZoneId.systemDefault())),
+                localizedDateFormat("MMMd").format(Instant.ofEpochMilli(transaction.timestamp).atZone(ZoneId.systemDefault())),
                 maxLines = 1,
                 style = TextStyle(color = GlanceTheme.colors.onSurfaceVariant, fontSize = 12.sp),
             )

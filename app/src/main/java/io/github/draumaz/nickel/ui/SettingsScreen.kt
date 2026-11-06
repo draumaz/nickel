@@ -1,5 +1,9 @@
 package io.github.draumaz.nickel.ui
 
+import io.github.draumaz.nickel.ui.components.localizedDateFormat
+import io.github.draumaz.nickel.ui.components.displayLabel
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -74,11 +78,11 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedback
@@ -114,7 +118,6 @@ import io.github.draumaz.nickel.ui.components.segmentShape
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
-import java.time.format.DateTimeFormatter
 import java.util.Currency
 
 @Composable
@@ -155,26 +158,27 @@ fun SettingsScreen(viewModel: NickelViewModel, onBack: () -> Unit) {
                 .navigationBarsPadding(),
         ) {
             ScreenHeader(
-                title = "Settings",
-                subtitle = "Make Nickel yours",
+                title = stringResource(R.string.settings),
+                subtitle = stringResource(R.string.settings_subtitle),
                 leading = {
                     FilledTonalIconButton(
                         onClick = onBack,
                         shapes = IconButtonDefaults.shapes(),
                         modifier = Modifier.size(44.dp),
                     ) {
-                        Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = stringResource(R.string.back))
                     }
                 },
             )
 
-            SectionLabel("Appearance")
+            SectionLabel(stringResource(R.string.section_appearance))
             SettingRow(
                 icon = Icons.Rounded.Palette,
                 iconShape = MaterialShapes.Cookie7Sided,
-                title = "Dynamic color",
-                subtitle = if (viewModel.dynamicColorSupported) "Use the colors from your wallpaper"
-                else "Needs Android 12 or newer",
+                title = stringResource(R.string.dynamic_color),
+                subtitle = stringResource(
+                    if (viewModel.dynamicColorSupported) R.string.dynamic_color_on else R.string.dynamic_color_unsupported
+                ),
                 shape = segmentShape(0, 2),
                 enabled = viewModel.dynamicColorSupported,
                 checked = settings.dynamicColor,
@@ -187,14 +191,14 @@ fun SettingsScreen(viewModel: NickelViewModel, onBack: () -> Unit) {
             )
             PaletteRow(shape = segmentShape(1, 2))
 
-            SectionLabel("Money")
+            SectionLabel(stringResource(R.string.section_money))
             SettingRow(
                 icon = Icons.Rounded.CurrencyExchange,
                 iconShape = MaterialShapes.Cookie9Sided,
-                title = "Currency",
+                title = stringResource(R.string.currency),
                 subtitle = settings.currencyCode
                     ?.let { runCatching { currencyLabel(Currency.getInstance(it)) }.getOrNull() }
-                    ?: "System default · ${currencyLabel(Money.systemCurrency)}",
+                    ?: stringResource(R.string.system_default_currency, currencyLabel(Money.systemCurrency)),
                 shape = segmentShape(0, 1),
                 onClick = { showCurrency = true },
             )
@@ -210,15 +214,15 @@ fun SettingsScreen(viewModel: NickelViewModel, onBack: () -> Unit) {
                 )
             }
 
-            SectionLabel("Automation")
+            SectionLabel(stringResource(R.string.section_automation))
             NotificationAccessRow(viewModel, settings.autoAddNotices, haptics)
 
-            SectionLabel("Your data")
+            SectionLabel(stringResource(R.string.section_data))
             SettingRow(
                 icon = Icons.Rounded.Download,
                 iconShape = MaterialShapes.Clover4Leaf,
-                title = "Import from CSV",
-                subtitle = "Bring in transactions from Dime or a spreadsheet",
+                title = stringResource(R.string.import_csv),
+                subtitle = stringResource(R.string.import_csv_subtitle),
                 shape = segmentShape(0, 2),
                 onClick = {
                     importLauncher.launch(
@@ -229,12 +233,9 @@ fun SettingsScreen(viewModel: NickelViewModel, onBack: () -> Unit) {
             SettingRow(
                 icon = Icons.Rounded.Upload,
                 iconShape = MaterialShapes.Sunny,
-                title = "Export to CSV",
-                subtitle = when (state.count) {
-                    0 -> "Nothing to export yet"
-                    1 -> "Share or save your 1 transaction as a CSV file"
-                    else -> "Share or save all ${state.count} transactions as a CSV file"
-                },
+                title = stringResource(R.string.export_csv),
+                subtitle = if (state.count == 0) stringResource(R.string.export_nothing)
+                else pluralStringResource(R.plurals.export_subtitle, state.count, state.count),
                 shape = segmentShape(1, 2),
                 enabled = state.count > 0,
                 onClick = viewModel::export,
@@ -354,7 +355,6 @@ private fun SettingRow(
 private fun NotificationAccessRow(viewModel: NickelViewModel, autoAdd: Boolean, haptics: HapticFeedback) {
     val context = LocalContext.current
     var hasAccess by remember { mutableStateOf(hasListenerAccess(context)) }
-    val lifecycleOwner = LocalLifecycleOwner.current
     // Captured transactions surface as notifications (with a Delete button), so the
     // runtime notification permission is asked for where the feature is turned on.
     val notificationPermission = rememberLauncherForActivityResult(
@@ -369,6 +369,7 @@ private fun NotificationAccessRow(viewModel: NickelViewModel, autoAdd: Boolean, 
         }
     }
     val currentAutoAdd by rememberUpdatedState(autoAdd)
+    val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event != Lifecycle.Event.ON_RESUME) return@LifecycleEventObserver
@@ -385,9 +386,8 @@ private fun NotificationAccessRow(viewModel: NickelViewModel, autoAdd: Boolean, 
     SettingRow(
         icon = Icons.Rounded.Notifications,
         iconShape = MaterialShapes.Cookie6Sided,
-        title = "Auto-add from notifications",
-        subtitle = if (hasAccess) "Watch payment and bank alerts for amounts"
-        else "Allow notification access in Android settings",
+        title = stringResource(R.string.auto_add),
+        subtitle = stringResource(if (hasAccess) R.string.auto_add_on else R.string.auto_add_needs_access),
         shape = segmentShape(0, 1),
         checked = autoAdd && hasAccess,
         onCheckedChange = { enabled ->
@@ -504,11 +504,19 @@ private fun Footer() {
         val linkStyle = TextLinkStyles(
             SpanStyle(color = MaterialTheme.colorScheme.primary, textDecoration = TextDecoration.Underline)
         )
+        val appName = stringResource(R.string.app_name)
+        val version = stringResource(R.string.about_version)
+        // Split around the placeholder so only the author's name carries the link.
+        val (byBefore, byAfter) = stringResource(R.string.about_by, "\u0000").split('\u0000', limit = 2)
+            .let { it[0] to it.getOrElse(1) { "" } }
         Text(
             buildAnnotatedString {
-                withLink(LinkAnnotation.Url(REPO_URL, linkStyle)) { append("Nickel") }
-                append(", 1.0\nby ")
+                withLink(LinkAnnotation.Url(REPO_URL, linkStyle)) { append(appName) }
+                append(version)
+                append('\n')
+                append(byBefore)
                 withLink(LinkAnnotation.Url(AUTHOR_URL, linkStyle)) { append("draumaz") }
+                append(byAfter)
             },
             textAlign = TextAlign.Center,
             style = MaterialTheme.typography.labelLarge,
@@ -551,13 +559,18 @@ private fun TransferDialogs(
                 label = "transfer",
             ) { s ->
                 when (s) {
-                    TransferState.Reading -> BusyContent("Reading your file…")
-                    TransferState.Importing -> BusyContent("Tucking everything in…")
-                    is TransferState.Failed -> MessageContent("Couldn't import", s.message, onDismiss)
+                    TransferState.Reading -> BusyContent(stringResource(R.string.import_reading))
+                    TransferState.Importing -> BusyContent(stringResource(R.string.import_busy))
+                    is TransferState.Failed -> MessageContent(stringResource(R.string.import_failed), stringResource(s.message), onDismiss)
                     is TransferState.Preview -> if (s.plan.transactions.isEmpty()) {
                         MessageContent(
-                            "Already imported",
-                            "All ${s.plan.duplicates} transactions in ${s.fileName ?: "this file"} are already in Nickel.",
+                            stringResource(R.string.already_imported),
+                            pluralStringResource(
+                                R.plurals.already_imported_body,
+                                s.plan.duplicates,
+                                s.plan.duplicates,
+                                s.fileName ?: stringResource(R.string.this_file),
+                            ),
                             onDismiss,
                         )
                     } else {
@@ -597,7 +610,7 @@ private fun MessageContent(title: String, body: String, onDismiss: () -> Unit) {
         Text(body, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(24.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-            TextButton(onClick = onDismiss) { Text("OK") }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.ok)) }
         }
     }
 }
@@ -616,12 +629,12 @@ private fun PreviewContent(
     val range = if (plan.earliest != null && plan.latest != null) {
         val start = day(plan.earliest)
         val end = day(plan.latest)
-        val full = DateTimeFormatter.ofPattern("MMM d, yyyy")
-        val short = DateTimeFormatter.ofPattern("MMM d")
+        val full = localizedDateFormat("yMMMd")
+        val short = localizedDateFormat("MMMd")
         when {
             start == end -> start.format(full)
-            start.year == end.year -> "${start.format(short)} – ${end.format(full)}"
-            else -> "${start.format(full)} – ${end.format(full)}"
+            start.year == end.year -> stringResource(R.string.date_range, start.format(short), end.format(full))
+            else -> stringResource(R.string.date_range, start.format(full), end.format(full))
         }
     } else null
     val incomes = plan.transactions.count { it.kind == Kind.INCOME }
@@ -643,7 +656,7 @@ private fun PreviewContent(
         }
         Spacer(Modifier.height(16.dp))
         Text(
-            "Import $count transaction${if (count == 1) "" else "s"}?",
+            pluralStringResource(R.plurals.import_question, count, count),
             style = MaterialTheme.typography.headlineSmall,
             color = MaterialTheme.colorScheme.onSurface,
             textAlign = TextAlign.Center,
@@ -657,21 +670,26 @@ private fun PreviewContent(
         val bodyColor = MaterialTheme.colorScheme.onSurfaceVariant
         range?.let { Text(it, style = body, color = bodyColor) }
         Text(
-            "$expenses expense${if (expenses == 1) "" else "s"} · $incomes income${if (incomes == 1) "" else "s"}",
+            stringResource(
+                R.string.dot_pair,
+                pluralStringResource(R.plurals.expense_count, expenses, expenses),
+                pluralStringResource(R.plurals.income_count, incomes, incomes),
+            ),
             style = body,
             color = bodyColor,
         )
         val skipped = buildList {
-            if (plan.duplicates > 0) add("${plan.duplicates} already in Nickel")
-            if (plan.unreadable > 0) add("${plan.unreadable} unreadable")
+            if (plan.duplicates > 0) add(stringResource(R.string.skip_duplicates, plan.duplicates))
+            if (plan.unreadable > 0) add(stringResource(R.string.skip_unreadable, plan.unreadable))
         }
-        if (skipped.isNotEmpty()) {
-            Text("Skipping " + skipped.joinToString(" and "), style = body, color = bodyColor)
+        when (skipped.size) {
+            1 -> Text(stringResource(R.string.skipping, skipped[0]), style = body, color = bodyColor)
+            2 -> Text(stringResource(R.string.skipping_both, skipped[0], skipped[1]), style = body, color = bodyColor)
         }
         if (plan.newCategories.isNotEmpty()) {
             Spacer(Modifier.height(16.dp))
             Text(
-                "New categories",
+                stringResource(R.string.new_categories),
                 style = MaterialTheme.typography.titleSmall,
                 color = MaterialTheme.colorScheme.onSurface,
             )
@@ -691,7 +709,7 @@ private fun PreviewContent(
                         CategoryBadge(c, size = 26.dp)
                         Spacer(Modifier.width(6.dp))
                         Text(
-                            c.label,
+                            c.displayLabel(),
                             style = MaterialTheme.typography.labelLarge,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -705,8 +723,8 @@ private fun PreviewContent(
             horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
-            Button(onClick = onConfirm, shapes = ButtonDefaults.shapes()) { Text("Import") }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
+            Button(onClick = onConfirm, shapes = ButtonDefaults.shapes()) { Text(stringResource(R.string.import_action)) }
         }
     }
 }

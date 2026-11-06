@@ -1,6 +1,10 @@
 package io.github.draumaz.nickel.ui.components
 
+import android.content.Context
+import android.content.res.Resources
 import android.text.format.DateFormat
+import androidx.compose.ui.res.stringResource
+import io.github.draumaz.nickel.R
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.Animatable
@@ -319,3 +323,53 @@ fun rememberTimeFormatter(): DateTimeFormatter {
     }
 }
 
+
+/**
+ * A date format from a skeleton ("MMMd", "EEEEMMMd", "yMMMd") laid out the locale's way:
+ * "Thursday, Nov 6" in English, "четверг, 6 нояб." in Russian. Fixed patterns would keep
+ * the English word order in every language.
+ */
+fun localizedDateFormat(skeleton: String): DateTimeFormatter {
+    val locale = Locale.getDefault()
+    return DateTimeFormatter.ofPattern(DateFormat.getBestDateTimePattern(locale, skeleton), locale)
+}
+
+/**
+ * Built-in categories' names in the user's language. Only display goes through here: the
+ * stored and exported label stays English, so CSV round-trips and imports from Dime keep
+ * matching categories by name whatever language the phone is in.
+ */
+private val BuiltInLabels: Map<String, Int> = mapOf(
+    "PAYCHECK" to R.string.category_paycheck,
+    "SALARY" to R.string.category_salary,
+    "FREELANCE" to R.string.category_freelance,
+    "INTEREST" to R.string.category_interest,
+    "GIFT" to R.string.category_gift,
+    "REFUND" to R.string.category_refund,
+    "OTHER_INCOME" to R.string.category_other_income,
+    "GROCERIES" to R.string.category_groceries,
+    "DINING" to R.string.category_dining,
+    "RENT" to R.string.category_rent,
+    "UTILITIES" to R.string.category_utilities,
+    "TRANSPORT" to R.string.category_transport,
+    "MEDICAL" to R.string.category_medical,
+    "SHOPPING" to R.string.category_shopping,
+    "ENTERTAINMENT" to R.string.category_entertainment,
+    "SUBSCRIPTIONS" to R.string.category_subscriptions,
+    "TRAVEL" to R.string.category_travel,
+    "EDUCATION" to R.string.category_education,
+    "PETS" to R.string.category_pets,
+    "NICOTINE" to R.string.category_nicotine,
+    "INVESTMENTS" to R.string.category_investments,
+    "OTHER_EXPENSE" to R.string.category_other_expense,
+)
+
+/** [Category.label], translated for built-ins; custom categories show what the user typed. */
+fun Category.displayLabel(context: Context): String = displayLabel(context.resources)
+
+fun Category.displayLabel(resources: Resources): String =
+    BuiltInLabels[id]?.let(resources::getString) ?: label
+
+@Composable
+fun Category.displayLabel(): String =
+    BuiltInLabels[id]?.let { stringResource(it) } ?: label

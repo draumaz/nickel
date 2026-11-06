@@ -1,6 +1,179 @@
 <resources>
-    <string name="app_name">Nickel</string>
+    <string name="app_name" translatable="false">Nickel</string>
     <string name="notice_listener_name">Nickel transaction capture</string>
     <string name="widget_name">Balance</string>
     <string name="widget_description">Your net total and latest transactions</string>
+
+    <!-- Shared -->
+    <string name="ok">OK</string>
+    <string name="cancel">Cancel</string>
+    <string name="done">Done</string>
+    <string name="delete">Delete</string>
+    <string name="undo">Undo</string>
+    <string name="back">Back</string>
+    <string name="settings">Settings</string>
+    <string name="today">Today</string>
+    <string name="yesterday">Yesterday</string>
+    <string name="kind_expense">Expense</string>
+    <string name="kind_income">Income</string>
+    <!-- Two facts side by side, e.g. "Groceries · 9:41" -->
+    <string name="dot_pair">%1$s · %2$s</string>
+    <string name="date_range">%1$s – %2$s</string>
+
+    <!-- Home -->
+    <string name="greeting_morning">Good morning</string>
+    <string name="greeting_afternoon">Good afternoon</string>
+    <string name="greeting_evening">Good evening</string>
+    <string name="add_transaction">Add transaction</string>
+    <string name="deleted_item">Deleted %1$s</string>
+    <string name="duplicate">Duplicate</string>
+    <string name="empty_ledger_title">Your ledger is empty</string>
+    <string name="empty_ledger_body">Tap + to log your first expense or income.</string>
+    <string name="no_income_yet">No income yet</string>
+    <string name="no_expenses_yet">No expenses yet</string>
+    <string name="empty_filter_body">Nothing to see here, which is honestly kind of nice.</string>
+    <string name="net_total">Net total</string>
+    <string name="income_from">Income from %1$s</string>
+    <string name="spent_on">Spent on %1$s</string>
+    <string name="total_income">Total income</string>
+    <string name="total_spent">Total spent</string>
+    <string name="money_in">In</string>
+    <string name="money_out">Out</string>
+    <string name="this_month">This month</string>
+    <string name="last_month">Last month</string>
+    <string name="of_income">Of income</string>
+    <string name="of_spending">Of spending</string>
+    <string name="percent">%1$d%%</string>
+    <string name="filter_all">All</string>
+    <string name="filter_expenses">Expenses</string>
+    <string name="filter_income">Income</string>
+
+    <!-- Entry sheet -->
+    <string name="add_note">Add a note</string>
+    <string name="save_changes">Save changes</string>
+    <string name="add_income">Add income</string>
+    <string name="add_expense">Add expense</string>
+    <string name="time">Time</string>
+    <string name="change_date">Change date</string>
+    <string name="change_time">Change time</string>
+    <string name="backspace">Backspace</string>
+    <string name="double_zero">Double zero</string>
+
+    <!-- New category -->
+    <string name="new_category">New category</string>
+    <string name="new_short">New</string>
+    <string name="new_income_category">New income category</string>
+    <string name="new_expense_category">New expense category</string>
+    <string name="name">Name</string>
+    <string name="category_exists">“%1$s” already exists; it’ll be selected</string>
+    <string name="icon">Icon</string>
+    <string name="use_existing">Use existing</string>
+    <string name="create">Create</string>
+
+    <!-- Settings -->
+    <string name="settings_subtitle">Make Nickel yours</string>
+    <string name="section_appearance">Appearance</string>
+    <string name="dynamic_color">Dynamic color</string>
+    <string name="dynamic_color_on">Use the colors from your wallpaper</string>
+    <string name="dynamic_color_unsupported">Needs Android 12 or newer</string>
+    <string name="section_money">Money</string>
+    <string name="currency">Currency</string>
+    <string name="system_default">System default</string>
+    <string name="system_default_currency">System default · %1$s</string>
+    <string name="section_automation">Automation</string>
+    <string name="auto_add">Auto-add from notifications</string>
+    <string name="auto_add_on">Watch payment and bank alerts for amounts</string>
+    <string name="auto_add_needs_access">Allow notification access in Android settings</string>
+    <string name="section_data">Your data</string>
+    <string name="import_csv">Import from CSV</string>
+    <string name="import_csv_subtitle">Bring in transactions from Dime or a spreadsheet</string>
+    <string name="export_csv">Export to CSV</string>
+    <string name="export_nothing">Nothing to export yet</string>
+    <plurals name="export_subtitle">
+        <item quantity="one">Share or save your %d transaction as a CSV file</item>
+        <item quantity="other">Share or save all %d transactions as a CSV file</item>
+    </plurals>
+    <!-- "Nickel, 1.0" on the first line, "by draumaz" on the second; %1$s is the author link. -->
+    <string name="about_version">, 1.0</string>
+    <string name="about_by">by %1$s</string>
+    <string name="currency_dialog_body">Changes the symbol amounts are shown with. Amounts aren’t converted.</string>
+    <string name="search">Search</string>
+    <string name="currency_selected">Selected</string>
+
+    <!-- Import and export -->
+    <string name="import_reading">Reading your file…</string>
+    <string name="import_busy">Tucking everything in…</string>
+    <string name="import_failed">Couldn’t import</string>
+    <string name="already_imported">Already imported</string>
+    <plurals name="already_imported_body">
+        <item quantity="one">The %1$d transaction in %2$s is already in Nickel.</item>
+        <item quantity="other">All %1$d transactions in %2$s are already in Nickel.</item>
+    </plurals>
+    <string name="this_file">this file</string>
+    <plurals name="import_question">
+        <item quantity="one">Import %d transaction?</item>
+        <item quantity="other">Import %d transactions?</item>
+    </plurals>
+    <plurals name="expense_count">
+        <item quantity="one">%d expense</item>
+        <item quantity="other">%d expenses</item>
+    </plurals>
+    <plurals name="income_count">
+        <item quantity="one">%d income</item>
+        <item quantity="other">%d incomes</item>
+    </plurals>
+    <string name="skip_duplicates">%d already in Nickel</string>
+    <string name="skip_unreadable">%d unreadable</string>
+    <string name="skipping">Skipping %1$s</string>
+    <string name="skipping_both">Skipping %1$s and %2$s</string>
+    <string name="new_categories">New categories</string>
+    <string name="import_action">Import</string>
+    <plurals name="imported_count">
+        <item quantity="one">Imported %d transaction</item>
+        <item quantity="other">Imported %d transactions</item>
+    </plurals>
+    <string name="import_open_failed">Couldn’t open that file.</string>
+    <string name="import_no_transactions">No transactions found in that file.</string>
+    <string name="import_unreadable">That doesn’t look like a CSV Nickel can read.</string>
+    <string name="import_empty_file">That file is empty.</string>
+    <string name="import_no_columns">Couldn’t find Date and Amount columns in that file.</string>
+    <string name="export_failed">Couldn’t prepare the export</string>
+    <string name="export_chooser">Export %1$s</string>
+    <string name="save_to_files">Save to files</string>
+    <string name="saved_file">Saved %1$s</string>
+    <string name="save_failed">Couldn’t save that file</string>
+
+    <!-- Widget -->
+    <string name="widget_net">Net</string>
+    <string name="widget_empty">No transactions yet</string>
+
+    <!-- Notification capture -->
+    <string name="channel_captured">Captured transactions</string>
+    <string name="channel_captured_description">Alerts when a payment notification is added to the ledger</string>
+    <string name="transaction_added">Transaction added</string>
+    <string name="source_text_message">Text message</string>
+
+    <!-- Built-in categories. Display only: CSV export keeps the English labels. -->
+    <string name="category_paycheck">Paycheck</string>
+    <string name="category_salary">Salary</string>
+    <string name="category_freelance">Freelance</string>
+    <string name="category_interest">Interest</string>
+    <string name="category_gift">Gift</string>
+    <string name="category_refund">Refund</string>
+    <string name="category_other_income">Other</string>
+    <string name="category_groceries">Groceries</string>
+    <string name="category_dining">Dining</string>
+    <string name="category_rent">Rent</string>
+    <string name="category_utilities">Utilities</string>
+    <string name="category_transport">Transport</string>
+    <string name="category_medical">Medical</string>
+    <string name="category_shopping">Shopping</string>
+    <string name="category_entertainment">Fun</string>
+    <string name="category_subscriptions">Subscriptions</string>
+    <string name="category_travel">Travel</string>
+    <string name="category_education">Education</string>
+    <string name="category_pets">Pets</string>
+    <string name="category_nicotine">Nicotine</string>
+    <string name="category_investments">Investments</string>
+    <string name="category_other_expense">Other</string>
 </resources>

@@ -23,6 +23,9 @@ data class NoticeMatch(
  */
 object NoticeParser {
 
+    /** Source label for texts; English here, swapped for the translation where it's shown. */
+    const val SMS_SOURCE = "Text message"
+
     // Two shapes only: a symbol- or code-prefixed amount ($1,234.56, USD 25) or a
     // code-suffixed one (25.00 USD). A bare number is never a transaction.
     private val amount = Regex(
@@ -80,7 +83,7 @@ object NoticeParser {
         val kind = kindOf(text) ?: kindOf(title) ?: return null
 
         val source = when {
-            smsPackages.any(packageName::startsWith) -> "Text message"
+            smsPackages.any(packageName::startsWith) -> SMS_SOURCE
             !appName.isNullOrBlank() -> appName
             else -> packageName.substringAfterLast('.')
         }

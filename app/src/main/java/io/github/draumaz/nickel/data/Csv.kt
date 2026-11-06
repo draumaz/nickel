@@ -67,7 +67,10 @@ data class ImportPlan(
     val latest: Long?,
 )
 
-class ImportException(message: String) : Exception(message)
+/** Why an import failed; the UI owns the wording so it can be translated. */
+class ImportException(val reason: Reason) : Exception(reason.name) {
+    enum class Reason { UNOPENABLE, EMPTY_FILE, NO_COLUMNS }
+}
 
 object LedgerCsv {
     // Dime writes "2026-10-31 22:03:00 +0000"; exports from Nickel use the same shape.
@@ -151,7 +154,7 @@ object LedgerCsv {
      */
     fun plan(text: String, existing: List<Transaction>, customCategories: List<Category>): ImportPlan {
         val rows = Csv.parse(text)
-        if (rows.isEmpty()) throw ImportException("That file is empty.")
+        if (rows.isEmpty()) throw ImportException(ImportException.Reason.EMPTY_FILE)
         val header = rows.first()
         val dateCol = column(header, "date", "time", "timestamp", "datetime", "created")
         val amountCol = column(header, "amount", "value", "sum", "price")
@@ -159,7 +162,7 @@ object LedgerCsv {
         val categoryCol = column(header, "category", "categories", "tag")
         val typeCol = column(header, "type", "kind", "transaction type")
         if (dateCol < 0 || amountCol < 0) {
-            throw ImportException("Couldn't find Date and Amount columns in that file.")
+            throw ImportException(ImportException.Reason.NO_COLUMNS)
         }
 
         val known = (Categories.builtIns + customCategories).toMutableList()

@@ -21,6 +21,12 @@ android {
         buildConfig = true
     }
 
+    // Lists the translated languages (values-ru, ...) so Android 13+ offers them under
+    // the app's own language setting, independent of the system language.
+    androidResources {
+        generateLocaleConfig = true
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true

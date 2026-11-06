@@ -1,5 +1,6 @@
 package io.github.draumaz.nickel.export
 
+import io.github.draumaz.nickel.R
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -50,7 +51,7 @@ class SaveExportActivity : ComponentActivity() {
             }
             Toast.makeText(
                 this@SaveExportActivity,
-                if (ok) "Saved ${source.name}" else "Couldn't save that file",
+                if (ok) getString(R.string.saved_file, source.name) else getString(R.string.save_failed),
                 Toast.LENGTH_SHORT,
             ).show()
             finish()
