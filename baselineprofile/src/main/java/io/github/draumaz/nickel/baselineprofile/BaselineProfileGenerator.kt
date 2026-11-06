@@ -73,7 +73,7 @@ class BaselineProfileGenerator {
     }
 
     private companion object {
-        const val PACKAGE = "io.github.draumaz.nickel.profiling"
+        const val PACKAGE = "xyz.draumaz.nickel.profiling"
         const val TIMEOUT = 5_000L
     }
 }

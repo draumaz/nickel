@@ -9,7 +9,7 @@ android {
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "io.github.draumaz.nickel"
+        applicationId = "xyz.draumaz.nickel"
         minSdk = 29
         targetSdk = 37
         versionCode = 1
@@ -85,7 +85,7 @@ androidComponents {
     onVariants(selector().all()) { variant ->
         val type = variant.buildType ?: return@onVariants
         if (type == "nonMinifiedRelease" || type.startsWith("benchmark")) {
-            variant.applicationId.set("io.github.draumaz.nickel.profiling")
+            variant.applicationId.set("xyz.draumaz.nickel.profiling")
         }
     }
 }

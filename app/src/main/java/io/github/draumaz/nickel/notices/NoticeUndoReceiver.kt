@@ -37,7 +37,7 @@ class NoticeUndoReceiver : BroadcastReceiver() {
     }
 
     companion object {
-        const val ACTION_UNDO = "io.github.draumaz.nickel.action.UNDO_NOTICE"
+        const val ACTION_UNDO = "xyz.draumaz.nickel.action.UNDO_NOTICE"
         const val EXTRA_TRANSACTION_ID = "transaction_id"
         const val EXTRA_NOTIFICATION_ID = "notification_id"
     }

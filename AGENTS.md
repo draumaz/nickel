@@ -43,7 +43,7 @@ No DI framework, no Room, no navigation library. Data flows one way through `Sta
 ## Build gotchas
 
 - **Release is signed with the debug keystore** (no release keystore exists) so it installs straight from Android Studio. The debug build has `applicationIdSuffix = ".debug"` and installs alongside release as a separate app (wrench launcher icon from `app/src/debug/`).
-- **Baseline-profile and benchmark variants are rebranded to `io.github.draumaz.nickel.profiling`** (see `androidComponents` block in `app/build.gradle.kts`). This is load-bearing: the profiler tooling uninstalls its app when done, and under the real id that would wipe the user's ledger. Profile rules match classes, not the package.
+- **Baseline-profile and benchmark variants are rebranded to `xyz.draumaz.nickel.profiling`** (see `androidComponents` block in `app/build.gradle.kts`). This is load-bearing: the profiler tooling uninstalls its app when done, and under the real id that would wipe the user's ledger. Profile rules match classes, not the package.
 - **WorkManager is pinned explicitly** in `libs.versions.toml` because Glance's transitive (ancient) WorkManager version has R8 keep-rule gaps that crash release builds at startup. Don't remove that pin.
 - **Experimental Material 3 / Expressive APIs are compiler opt-ins** in `app/build.gradle.kts` (`kotlin { compilerOptions { optIn.addAll(...) } }`), not per-file annotations. Uses Material 3 `1.5.0-beta02`; Expressive APIs (MaterialShapes, motionScheme, etc.) are in active use.
 
