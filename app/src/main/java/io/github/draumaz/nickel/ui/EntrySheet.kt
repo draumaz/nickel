@@ -424,8 +424,17 @@ private fun EntryContent(
             )
             WhenPill(
                 timestamp = timestamp,
-                onPickDate = { showDatePicker = true },
-                onPickTime = { showTimePicker = true },
+                // Touching the pill reads as being done with the keyboard: dropping the
+                // note's focus first keeps the picker dialog from handing focus back to
+                // the field on close, which would pop the keyboard up again.
+                onPickDate = {
+                    focus.clearFocus()
+                    showDatePicker = true
+                },
+                onPickTime = {
+                    focus.clearFocus()
+                    showTimePicker = true
+                },
             )
         }
 
