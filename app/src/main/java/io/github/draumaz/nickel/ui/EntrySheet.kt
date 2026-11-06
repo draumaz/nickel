@@ -126,6 +126,8 @@ fun EntrySheet(
     customCategories: List<Category>,
     onCreateCategory: (Category) -> Unit,
     onDismiss: () -> Unit,
+    /** Prefills a *new* entry (amount, kind, category, note) from it, timestamped now. */
+    template: Transaction? = null,
     onSave: (Transaction) -> Unit,
     onDelete: (Transaction) -> Unit,
 ) {
@@ -144,6 +146,7 @@ fun EntrySheet(
         EntryContent(
             initialKind = initialKind,
             editing = editing,
+            template = template,
             customCategories = customCategories,
             onCreateCategory = onCreateCategory,
             onSave = { close { onSave(it) } },
@@ -269,18 +272,22 @@ private fun BoxScope.KindSwipeHints(state: KindSwipeState, kind: Kind, gutter: D
 private fun EntryContent(
     initialKind: Kind,
     editing: Transaction?,
+    template: Transaction?,
     customCategories: List<Category>,
     onCreateCategory: (Category) -> Unit,
     onSave: (Transaction) -> Unit,
     onDelete: (Transaction) -> Unit,
 ) {
+    // A clone copies what was spent on what, but not when or which entry it was: it saves
+    // under a fresh id and starts at the current time, like any new entry.
+    val source = editing ?: template
     val haptics = LocalHapticFeedback.current
     val focus = LocalFocusManager.current
 
-    var kind by rememberSaveable { mutableStateOf(editing?.kind ?: initialKind) }
-    var input by rememberSaveable { mutableStateOf(editing?.let { Money.toInput(it.amountCents) } ?: "") }
-    var category by rememberSaveable { mutableStateOf(editing?.category ?: Categories.default(kind)) }
-    var note by rememberSaveable { mutableStateOf(editing?.note ?: "") }
+    var kind by rememberSaveable { mutableStateOf(source?.kind ?: initialKind) }
+    var input by rememberSaveable { mutableStateOf(source?.let { Money.toInput(it.amountCents) } ?: "") }
+    var category by rememberSaveable { mutableStateOf(source?.category ?: Categories.default(kind)) }
+    var note by rememberSaveable { mutableStateOf(source?.note ?: "") }
     var timestamp by rememberSaveable { mutableLongStateOf(editing?.timestamp ?: System.currentTimeMillis()) }
     var showDatePicker by remember { mutableStateOf(false) }
     var showTimePicker by remember { mutableStateOf(false) }

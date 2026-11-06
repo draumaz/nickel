@@ -50,6 +50,7 @@ import androidx.compose.material.icons.automirrored.rounded.TrendingUp
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.CalendarMonth
 import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.PieChart
@@ -179,6 +180,8 @@ fun HomeScreen(viewModel: NickelViewModel, onOpenSettings: () -> Unit) {
 
     var sheetKind by remember { mutableStateOf<Kind?>(null) }
     var editing by remember { mutableStateOf<Transaction?>(null) }
+    /** The transaction a swipe-right is cloning into a new entry, if any. */
+    var cloning by remember { mutableStateOf<Transaction?>(null) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     fun deleteWithUndo(t: Transaction) {
@@ -210,6 +213,7 @@ fun HomeScreen(viewModel: NickelViewModel, onOpenSettings: () -> Unit) {
                 onClick = {
                     Haptics.fabToggle(context, opening = true)
                     editing = null
+                    cloning = null
                     sheetKind = Kind.EXPENSE
                 },
                 modifier = Modifier
@@ -300,11 +304,18 @@ fun HomeScreen(viewModel: NickelViewModel, onOpenSettings: () -> Unit) {
                         badgeTurn = badgeTurn,
                         onClick = {
                             editing = it
+                            cloning = null
                             sheetKind = it.kind
                         },
                         onDelete = {
                             haptics.performHapticFeedback(HapticFeedbackType.Confirm)
                             deleteWithUndo(it)
+                        },
+                        onClone = {
+                            haptics.performHapticFeedback(HapticFeedbackType.Confirm)
+                            editing = null
+                            cloning = it
+                            sheetKind = it.kind
                         },
                     )
                 }
@@ -317,11 +328,13 @@ fun HomeScreen(viewModel: NickelViewModel, onOpenSettings: () -> Unit) {
             sheetState = sheetState,
             initialKind = kind,
             editing = editing,
+            template = cloning,
             customCategories = state.customCategories,
             onCreateCategory = viewModel::addCategory,
             onDismiss = {
                 sheetKind = null
                 editing = null
+                cloning = null
             },
             onSave = { t ->
                 val isNew = editing == null
@@ -338,6 +351,7 @@ private fun LazyListScope.transactionList(
     badgeTurn: State<Float>,
     onClick: (Transaction) -> Unit,
     onDelete: (Transaction) -> Unit,
+    onClone: (Transaction) -> Unit,
 ) {
     val zone = ZoneId.systemDefault()
     val byDay = transactions.groupBy { Instant.ofEpochMilli(it.timestamp).atZone(zone).toLocalDate() }
@@ -352,6 +366,7 @@ private fun LazyListScope.transactionList(
                 badgeTurn = badgeTurn,
                 onClick = { onClick(t) },
                 onDelete = { onDelete(t) },
+                onClone = { onClone(t) },
                 modifier = Modifier
                     .animateItem()
                     .padding(bottom = 2.dp),
@@ -799,9 +814,11 @@ private fun TransactionRow(
     badgeTurn: State<Float>,
     onClick: () -> Unit,
     onDelete: () -> Unit,
+    onClone: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val dismissState = rememberSwipeToDismissBoxState()
+    val scope = rememberCoroutineScope()
     val money = NickelTheme.money
     val timeFormatter = rememberTimeFormatter()
     val time = remember(transaction.timestamp, timeFormatter) {
@@ -814,12 +831,28 @@ private fun TransactionRow(
     SwipeToDismissBox(
         state = dismissState,
         modifier = modifier.clip(shape),
-        enableDismissFromStartToEnd = false,
-        onDismiss = { if (it == SwipeToDismissBoxValue.EndToStart) onDelete() },
+        onDismiss = {
+            when (it) {
+                SwipeToDismissBoxValue.EndToStart -> onDelete()
+                // Cloning keeps the row: open the sheet and spring the row back into place.
+                SwipeToDismissBoxValue.StartToEnd -> {
+                    onClone()
+                    scope.launch { dismissState.reset() }
+                }
+                SwipeToDismissBoxValue.Settled -> Unit
+            }
+        },
         backgroundContent = {
-            val active = dismissState.targetValue == SwipeToDismissBoxValue.EndToStart
+            val cloning = dismissState.dismissDirection == SwipeToDismissBoxValue.StartToEnd
+            val active = dismissState.targetValue != SwipeToDismissBoxValue.Settled
+            val colors = MaterialTheme.colorScheme
             val bg by animateColorAsState(
-                if (active) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.errorContainer,
+                when {
+                    cloning && active -> colors.primary
+                    cloning -> colors.primaryContainer
+                    active -> colors.error
+                    else -> colors.errorContainer
+                },
                 MaterialTheme.motionScheme.fastEffectsSpec(),
                 label = "dismissBg",
             )
@@ -833,12 +866,17 @@ private fun TransactionRow(
                     .fillMaxSize()
                     .background(bg)
                     .padding(horizontal = 24.dp),
-                contentAlignment = Alignment.CenterEnd,
+                contentAlignment = if (cloning) Alignment.CenterStart else Alignment.CenterEnd,
             ) {
                 Icon(
-                    Icons.Rounded.DeleteOutline,
-                    contentDescription = "Delete",
-                    tint = if (active) MaterialTheme.colorScheme.onError else MaterialTheme.colorScheme.onErrorContainer,
+                    if (cloning) Icons.Rounded.ContentCopy else Icons.Rounded.DeleteOutline,
+                    contentDescription = if (cloning) "Duplicate" else "Delete",
+                    tint = when {
+                        cloning && active -> colors.onPrimary
+                        cloning -> colors.onPrimaryContainer
+                        active -> colors.onError
+                        else -> colors.onErrorContainer
+                    },
                     modifier = Modifier.graphicsLayer { scaleX = iconScale; scaleY = iconScale },
                 )
             }
