@@ -4,7 +4,12 @@ import android.text.format.DateFormat
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
@@ -375,6 +380,7 @@ private fun EntryContent(
                     onClick = {
                         haptics.performHapticFeedback(HapticFeedbackType.SegmentFrequentTick)
                         category = c
+                        focus.clearFocus()
                     },
                     modifier = Modifier.animateItem(),
                 )
@@ -635,6 +641,15 @@ internal fun CategoryChip(
     val progress by animateFloatAsState(if (selected) 1f else 0f, spatial, label = "morph")
     val rotation by animateFloatAsState(if (selected) 0f else -60f, spatial, label = "spin")
     val scale by animateFloatAsState(if (selected) 1.08f else 1f, spatial, label = "scale")
+    // The same slow turn as the ledger badges and add button, phase-shifted per category
+    // so neighbouring chips don't spin in lockstep.
+    val spin = rememberInfiniteTransition(label = "chipSpin")
+    val turn by spin.animateFloat(
+        0f, 360f,
+        infiniteRepeatable(tween(14_000, easing = LinearEasing)),
+        label = "chipTurn",
+    )
+    val phase = remember(category.id) { abs(category.id.hashCode() % 360).toFloat() }
     val container by animateColorAsState(
         if (selected) categoryContainer(category) else MaterialTheme.colorScheme.surfaceContainerHighest,
         MaterialTheme.motionScheme.defaultEffectsSpec(),
@@ -661,7 +676,7 @@ internal fun CategoryChip(
             shapeProgress = progress,
             containerColor = container,
             contentColor = content,
-            shapeRotation = { rotation },
+            shapeRotation = { rotation + phase + turn },
             modifier = Modifier.graphicsLayer {
                 scaleX = scale
                 scaleY = scale

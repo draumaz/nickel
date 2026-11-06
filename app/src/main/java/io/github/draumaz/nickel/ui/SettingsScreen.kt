@@ -10,6 +10,11 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
@@ -406,6 +411,12 @@ private fun openNotificationAccess(context: Context) {
 @Composable
 private fun PaletteRow(shape: RoundedCornerShape) {
     val c = MaterialTheme.colorScheme
+    val spin = rememberInfiniteTransition(label = "palette")
+    val paletteTurn = spin.animateFloat(
+        0f, 360f,
+        infiniteRepeatable(tween(14_000, easing = LinearEasing)),
+        label = "paletteTurn",
+    )
     Surface(
         shape = shape,
         color = c.surfaceBright,
@@ -425,11 +436,14 @@ private fun PaletteRow(shape: RoundedCornerShape) {
                 c.primaryContainer to MaterialShapes.Flower,
                 c.secondaryContainer to MaterialShapes.Pill,
                 c.tertiaryContainer to MaterialShapes.Gem,
-            ).forEach { (color, polygon) ->
+            ).forEachIndexed { index, (color, polygon) ->
+                // The same slow turn as the badges and add button, phase-shifted per swatch
+                // so neighbouring shapes don't spin in lockstep.
                 Box(
                     Modifier
                         .weight(1f)
                         .height(40.dp)
+                        .graphicsLayer { rotationZ = index * 47f + paletteTurn.value }
                         .background(color, polygon.toShape())
                 )
             }
