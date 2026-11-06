@@ -27,7 +27,7 @@ class NoticeUndoReceiver : BroadcastReceiver() {
         val result = goAsync()
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
             try {
-                TransactionRepository(context).delete(transactionId)
+                TransactionRepository.get(context).delete(transactionId)
                 runCatching { NickelWidget().updateAll(context) }
             } finally {
                 NotificationManagerCompat.from(context).cancel(notificationId)

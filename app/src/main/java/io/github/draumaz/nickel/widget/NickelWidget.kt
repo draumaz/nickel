@@ -50,7 +50,7 @@ class NickelWidget : GlanceAppWidget() {
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         SettingsRepository(context) // applies the chosen currency to Money
-        val repository = TransactionRepository(context)
+        val repository = TransactionRepository.get(context)
         repository.load()
         val transactions = repository.ledger.value?.transactions.orEmpty()
         val net = transactions.sumOf { it.signedCents }

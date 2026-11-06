@@ -20,8 +20,14 @@ data class Ledger(
 /**
  * Stores the ledger as two small JSON files in app storage. A personal ledger stays
  * tiny, so reading and rewriting whole files is simpler than a database.
+ *
+ * One instance per process, shared through [get]. Every mutation rewrites both files in
+ * full from the in-memory ledger, so two instances would each write their own stale
+ * snapshot over the other's: a transaction captured by the notification listener while
+ * the app is open would vanish on the next save from the app. Sharing the instance also
+ * shares the lock and lets Home show captured entries live.
  */
-class TransactionRepository(context: Context) {
+class TransactionRepository private constructor(context: Context) {
 
     private val transactionsFile = File(context.filesDir, "transactions.json")
     private val categoriesFile = File(context.filesDir, "categories.json")
@@ -32,7 +38,8 @@ class TransactionRepository(context: Context) {
     /** `null` until the first load from disk finishes. */
     val ledger: StateFlow<Ledger?> = _ledger.asStateFlow()
 
-    suspend fun load() {
+    /** Re-reads the files; under the write lock so it can't publish a pre-write snapshot. */
+    suspend fun load() = writeLock.withLock {
         _ledger.value = withContext(Dispatchers.IO) { read() }
     }
 
@@ -62,7 +69,10 @@ class TransactionRepository(context: Context) {
 
     private suspend fun mutate(block: (Ledger) -> Ledger) {
         writeLock.withLock {
-            val current = _ledger.value ?: Ledger(emptyList(), emptyList())
+            // Never mutate an unloaded ledger as if it were empty: a write from a cold
+            // process (the notification's Delete button) would otherwise replace the
+            // whole ledger with the one change.
+            val current = _ledger.value ?: withContext(Dispatchers.IO) { read() }
             val next = withContext(Dispatchers.Default) {
                 block(current).let { l ->
                     l.copy(transactions = l.transactions.sortedByDescending { it.timestamp })
@@ -147,5 +157,14 @@ class TransactionRepository(context: Context) {
         val tmp = File(file.parentFile, "${file.name}.tmp")
         tmp.writeText(text)
         tmp.renameTo(file)
+    }
+
+    companion object {
+        @Volatile private var instance: TransactionRepository? = null
+
+        fun get(context: Context): TransactionRepository =
+            instance ?: synchronized(this) {
+                instance ?: TransactionRepository(context.applicationContext).also { instance = it }
+            }
     }
 }

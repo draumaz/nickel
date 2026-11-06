@@ -48,6 +48,7 @@ import androidx.compose.material.icons.rounded.Work
 import androidx.compose.material3.MaterialShapes
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.graphics.shapes.RoundedPolygon
+import androidx.graphics.shapes.TransformResult
 import java.io.Serializable
 
 enum class Kind { EXPENSE, INCOME }
@@ -185,7 +186,7 @@ object CategoryIcons {
 
 object CategoryShapes {
     private val shapes: Map<String, RoundedPolygon> by lazy {
-        mapOf(
+        mapOf<String, RoundedPolygon>(
             "cookie4" to MaterialShapes.Cookie4Sided,
             "cookie6" to MaterialShapes.Cookie6Sided,
             "cookie7" to MaterialShapes.Cookie7Sided,
@@ -206,7 +207,22 @@ object CategoryShapes {
             "bun" to MaterialShapes.Bun,
             "heart" to MaterialShapes.Heart,
             "puffyDiamond" to MaterialShapes.PuffyDiamond,
-        )
+        ).mapValues { (_, shape) -> shape.fitForSpin() }
+    }
+
+    /**
+     * Rescales a shape so its farthest point sits on the unit square's inscribed circle.
+     * MaterialShapes are fitted to their *upright* bounding box, so boxy ones (Bun,
+     * Slanted, Heart) poke past it as they turn: spinning, Bun covers ~18% more width than
+     * a cookie, and badges read as different sizes. Fitting the circle each shape sweeps
+     * gives every spinning badge the same footprint.
+     */
+    private fun RoundedPolygon.fitForSpin(): RoundedPolygon {
+        val (left, top, right, _) = calculateMaxBounds()
+        val scale = 1f / (right - left)
+        val cx = (left + right) / 2
+        val cy = top + (right - left) / 2
+        return transformed { x, y -> TransformResult(0.5f + (x - cx) * scale, 0.5f + (y - cy) * scale) }
     }
 
     /** Shapes handed out to imported categories, in rotation. */
@@ -215,7 +231,7 @@ object CategoryShapes {
         "bun", "clover8", "pentagon", "cookie6", "heart", "puffy", "slanted",
     )
 
-    fun get(key: String): RoundedPolygon = shapes[key] ?: MaterialShapes.Cookie9Sided
+    fun get(key: String): RoundedPolygon = shapes[key] ?: shapes.getValue("cookie9")
 }
 
 object Categories {

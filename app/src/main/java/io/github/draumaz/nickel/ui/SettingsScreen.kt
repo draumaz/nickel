@@ -78,6 +78,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedback
@@ -354,18 +355,33 @@ private fun NotificationAccessRow(viewModel: NickelViewModel, autoAdd: Boolean, 
     val context = LocalContext.current
     var hasAccess by remember { mutableStateOf(hasListenerAccess(context)) }
     val lifecycleOwner = LocalLifecycleOwner.current
+    // Captured transactions surface as notifications (with a Delete button), so the
+    // runtime notification permission is asked for where the feature is turned on.
+    val notificationPermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { }
+    fun requestAlertsIfNeeded() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            context.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) !=
+            android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) {
+            notificationPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
+    val currentAutoAdd by rememberUpdatedState(autoAdd)
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) hasAccess = hasListenerAccess(context)
+            if (event != Lifecycle.Event.ON_RESUME) return@LifecycleEventObserver
+            val granted = hasListenerAccess(context)
+            // Back from granting access after switching on: the tap went to Android's
+            // settings instead of the permission prompt, so ask for alerts now, or the
+            // Delete-button notification would never show.
+            if (granted && !hasAccess && currentAutoAdd) requestAlertsIfNeeded()
+            hasAccess = granted
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
-    // Captured transactions surface as notifications (with a Delete button), so the
-    // runtime notification permission is asked for here, where the feature is turned on.
-    val notificationPermission = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission(),
-    ) { }
     SettingRow(
         icon = Icons.Rounded.Notifications,
         iconShape = MaterialShapes.Cookie6Sided,
@@ -385,13 +401,8 @@ private fun NotificationAccessRow(viewModel: NickelViewModel, autoAdd: Boolean, 
             viewModel.setAutoAddNotices(enabled)
             if (enabled && !hasAccess) {
                 openNotificationAccess(context)
-            } else if (
-                enabled &&
-                Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-                context.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) !=
-                android.content.pm.PackageManager.PERMISSION_GRANTED
-            ) {
-                notificationPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+            } else if (enabled) {
+                requestAlertsIfNeeded()
             }
         },
     )
@@ -450,14 +461,16 @@ private fun PaletteRow(shape: RoundedCornerShape) {
                 c.tertiaryContainer to MaterialShapes.Gem,
             ).forEachIndexed { index, (color, polygon) ->
                 // The same slow turn as the badges and add button, phase-shifted per swatch
-                // so neighbouring shapes don't spin in lockstep.
-                Box(
-                    Modifier
-                        .weight(1f)
-                        .height(40.dp)
-                        .graphicsLayer { rotationZ = index * 47f + paletteTurn.value }
-                        .background(color, polygon.toShape())
-                )
+                // so neighbouring shapes don't spin in lockstep. Square, centred in its slot:
+                // a shape stretched to a wide slot would wobble and overrun the row as it turns.
+                Box(Modifier.weight(1f).height(40.dp), contentAlignment = Alignment.Center) {
+                    Box(
+                        Modifier
+                            .size(40.dp)
+                            .graphicsLayer { rotationZ = index * 47f + paletteTurn.value }
+                            .background(color, polygon.toShape())
+                    )
+                }
             }
         }
     }

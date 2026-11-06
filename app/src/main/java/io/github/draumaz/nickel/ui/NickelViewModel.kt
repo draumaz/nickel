@@ -83,7 +83,7 @@ sealed interface TransferState {
 
 class NickelViewModel(app: Application) : AndroidViewModel(app) {
 
-    private val repository = TransactionRepository(app)
+    private val repository = TransactionRepository.get(app)
     private val settingsRepository = SettingsRepository(app)
     private val filter = MutableStateFlow(Filter.ALL)
     private val categoryFilter = MutableStateFlow<String?>(null)

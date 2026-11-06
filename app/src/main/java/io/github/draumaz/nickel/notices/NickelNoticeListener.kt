@@ -38,9 +38,9 @@ import kotlinx.coroutines.launch
  */
 class NickelNoticeListener : NotificationListenerService() {
 
-    // The service outlives any ViewModel, so it owns its plumbing: a fresh repository per
-    // write keeps it correct across process restarts, and the widget gets updated here too
-    // because the ViewModel's ledger watcher only runs while the app is open.
+    // The service outlives any ViewModel, so it updates the widget itself: the ViewModel's
+    // ledger watcher only runs while the app is open. The repository is the process-wide
+    // one, so an open Home screen sees the capture immediately.
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {
@@ -58,16 +58,19 @@ class NickelNoticeListener : NotificationListenerService() {
         // restarted under a different task than the settings screen.
         if (!SettingsRepository(applicationContext).settings.value.autoAddNotices) return
 
-        val seen = seenKeys().toMutableSet()
-        if (!seen.add(sbn.key)) return
+        // Keyed on content as well as the notification key: messaging apps reuse one key per
+        // conversation, so a bank's second alert in the same thread would otherwise be
+        // dropped as already seen. A re-post of the same alert still matches and is skipped.
+        val fingerprint = "${sbn.key}|${title.orEmpty()}|$text".hashCode().toString()
+        val seen = seenKeys()
+        if (fingerprint in seen) return
 
         val appName = labelFor(sbn.packageName)
         val match = NoticeParser.parse(sbn.packageName, appName, title, text) ?: return
-        remember(seen)
+        remember(seen + fingerprint)
 
         scope.launch {
-            val repository = TransactionRepository(applicationContext)
-            repository.load()
+            val repository = TransactionRepository.get(applicationContext)
             val transaction = Transaction(
                 id = System.nanoTime(),
                 amountCents = match.amountCents,
@@ -89,15 +92,18 @@ class NickelNoticeListener : NotificationListenerService() {
         super.onDestroy()
     }
 
-    /** Notification keys already turned into transactions, capped so the file stays small. */
-    private fun seenKeys() =
-        getSharedPreferences("notices", Context.MODE_PRIVATE).getStringSet(KEY_SEEN, emptySet())
-            ?: emptySet()
+    /**
+     * Fingerprints of notifications already turned into transactions, oldest first. Kept as
+     * one newline-joined string rather than a string set, because a set has no order and
+     * capping it would evict arbitrary entries, recent ones included.
+     */
+    private fun seenKeys(): List<String> =
+        getSharedPreferences("notices", Context.MODE_PRIVATE).getString(KEY_SEEN, null)
+            ?.split('\n')?.filter { it.isNotEmpty() }.orEmpty()
 
-    private fun remember(seen: Set<String>) {
-        val capped = if (seen.size > MAX_SEEN) seen.drop(seen.size - MAX_SEEN).toSet() else seen
+    private fun remember(seen: List<String>) {
         getSharedPreferences("notices", Context.MODE_PRIVATE)
-            .edit().putStringSet(KEY_SEEN, capped).apply()
+            .edit().putString(KEY_SEEN, seen.takeLast(MAX_SEEN).joinToString("\n")).apply()
     }
 
     private fun labelFor(packageName: String): String? = runCatching {
@@ -171,7 +177,7 @@ class NickelNoticeListener : NotificationListenerService() {
 
     private companion object {
         const val CHANNEL_ID = "captured"
-        const val KEY_SEEN = "seen"
+        const val KEY_SEEN = "seen_fingerprints"
         const val MAX_SEEN = 256
     }
 }
