@@ -1,13 +1,20 @@
 package io.github.draumaz.nickel.notices
 
 import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
+import androidx.core.app.NotificationCompat
 import androidx.glance.appwidget.updateAll
+import io.github.draumaz.nickel.R
 import io.github.draumaz.nickel.data.Categories
+import io.github.draumaz.nickel.data.Money
 import io.github.draumaz.nickel.data.NoticeParser
 import io.github.draumaz.nickel.data.SettingsRepository
 import io.github.draumaz.nickel.data.Transaction
@@ -61,19 +68,19 @@ class NickelNoticeListener : NotificationListenerService() {
         scope.launch {
             val repository = TransactionRepository(applicationContext)
             repository.load()
-            repository.upsert(
-                Transaction(
-                    id = System.nanoTime(),
-                    amountCents = match.amountCents,
-                    kind = match.kind,
-                    // Notifications rarely name a category; drop them in "Other" and let
-                    // the user reassign when they next open the app.
-                    category = Categories.fallback(match.kind),
-                    note = match.note,
-                    timestamp = sbn.postTime,
-                )
+            val transaction = Transaction(
+                id = System.nanoTime(),
+                amountCents = match.amountCents,
+                kind = match.kind,
+                // Notifications rarely name a category; drop them in "Other" and let
+                // the user reassign when they next open the app.
+                category = Categories.fallback(match.kind),
+                note = match.note,
+                timestamp = sbn.postTime,
             )
+            repository.upsert(transaction)
             runCatching { NickelWidget().updateAll(applicationContext) }
+            notifyCaptured(transaction, match.source)
         }
     }
 
@@ -103,7 +110,67 @@ class NickelNoticeListener : NotificationListenerService() {
         packageManager.getApplicationLabel(info).toString()
     }.getOrNull()
 
+    /**
+     * Announces a captured transaction with a Delete button, because a parse is a guess:
+     * the undo puts the ledger back exactly as it was without opening the app. Skipped
+     * silently when the runtime notification permission is missing, so capture still
+     * works, just quieter, on Android 13+ installs that never granted it.
+     */
+    private fun notifyCaptured(transaction: Transaction, source: String) {
+        if (!canNotify()) return
+        val manager = getSystemService(NotificationManager::class.java) ?: return
+        manager.createNotificationChannel(
+            NotificationChannel(
+                CHANNEL_ID,
+                "Captured transactions",
+                NotificationManager.IMPORTANCE_DEFAULT,
+            ).apply { description = "Alerts when a payment notification is added to the ledger" }
+        )
+
+        val notificationId = (transaction.id % Int.MAX_VALUE).toInt()
+        val undo = PendingIntent.getBroadcast(
+            applicationContext,
+            notificationId,
+            Intent(applicationContext, NoticeUndoReceiver::class.java)
+                .setAction(NoticeUndoReceiver.ACTION_UNDO)
+                .putExtra(NoticeUndoReceiver.EXTRA_TRANSACTION_ID, transaction.id)
+                .putExtra(NoticeUndoReceiver.EXTRA_NOTIFICATION_ID, notificationId),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+
+        // Tapping the body opens the app to edit the entry properly (reassign the
+        // category, fix the amount); autoCancel clears the alert either way.
+        val openApp = packageManager.getLaunchIntentForPackage(packageName)?.let { intent ->
+            PendingIntent.getActivity(
+                applicationContext,
+                notificationId,
+                intent,
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+            )
+        }
+
+        manager.notify(
+            notificationId,
+            NotificationCompat.Builder(applicationContext, CHANNEL_ID)
+                .setSmallIcon(R.drawable.ic_notification)
+                .setContentTitle("Transaction added")
+                .setContentText("${Money.formatSigned(transaction.signedCents)} · $source")
+                .setSubText(transaction.note)
+                .setContentIntent(openApp)
+                .addAction(0, "Delete", undo)
+                .setAutoCancel(true)
+                .setLocalOnly(true)
+                .build(),
+        )
+    }
+
+    private fun canNotify(): Boolean =
+        Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+            checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) ==
+            PackageManager.PERMISSION_GRANTED
+
     private companion object {
+        const val CHANNEL_ID = "captured"
         const val KEY_SEEN = "seen"
         const val MAX_SEEN = 256
     }

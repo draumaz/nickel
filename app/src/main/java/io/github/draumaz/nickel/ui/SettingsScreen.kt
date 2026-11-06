@@ -361,6 +361,11 @@ private fun NotificationAccessRow(viewModel: NickelViewModel, autoAdd: Boolean, 
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
+    // Captured transactions surface as notifications (with a Delete button), so the
+    // runtime notification permission is asked for here, where the feature is turned on.
+    val notificationPermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { }
     SettingRow(
         icon = Icons.Rounded.Notifications,
         iconShape = MaterialShapes.Cookie6Sided,
@@ -380,6 +385,13 @@ private fun NotificationAccessRow(viewModel: NickelViewModel, autoAdd: Boolean, 
             viewModel.setAutoAddNotices(enabled)
             if (enabled && !hasAccess) {
                 openNotificationAccess(context)
+            } else if (
+                enabled &&
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                context.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) !=
+                android.content.pm.PackageManager.PERMISSION_GRANTED
+            ) {
+                notificationPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS)
             }
         },
     )
