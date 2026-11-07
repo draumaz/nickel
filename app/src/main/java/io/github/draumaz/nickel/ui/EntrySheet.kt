@@ -59,7 +59,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.SheetState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -89,6 +88,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.util.VelocityTracker
+import androidx.compose.ui.input.pointer.util.addPointerInputChange
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -122,11 +124,72 @@ import kotlin.math.abs
 import kotlin.math.exp
 import kotlin.math.sign
 import kotlinx.coroutines.launch
+import androidx.compose.animation.core.FiniteAnimationSpec
+import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material3.BottomSheetDefaults
+import androidx.compose.material3.MaterialShapes
+import androidx.compose.material3.MotionScheme
+import androidx.compose.material3.SheetValue
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.toPath
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.Stable
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.RoundRect
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.geometry.isSpecified
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.Matrix
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.vector.rememberVectorPainter
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.onPlaced
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.dismiss
+import androidx.graphics.shapes.CornerRounding
+import androidx.graphics.shapes.Morph
+import androidx.graphics.shapes.RoundedPolygon
+import androidx.graphics.shapes.TransformResult
+import androidx.graphics.shapes.rectangle
+import kotlin.math.cos
+import kotlin.math.sin
+import kotlinx.coroutines.flow.first
+
+/**
+ * Where the add button sits and how it looks right now, so a new-entry sheet can grow out of
+ * it and shrink back into it. The button writes its geometry; the sheet flips [covered] while
+ * it is drawing the scallop itself, and the button hides for that time so there's only ever
+ * one of them on screen.
+ */
+@Stable
+class ScallopOrigin {
+    /** The button's centre, in screen coordinates. */
+    var centerOnScreen = Offset.Unspecified
+    var diameter = 0f
+    var color = Color.Unspecified
+    var iconColor = Color.Unspecified
+    /** The button's live turn in degrees; read per frame so the scallop keeps spinning. */
+    var rotation: () -> Float = { 0f }
+    var covered by mutableStateOf(false)
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EntrySheet(
-    sheetState: SheetState,
     initialKind: Kind,
     editing: Transaction?,
     customCategories: List<Category>,
@@ -134,21 +197,66 @@ fun EntrySheet(
     onDismiss: () -> Unit,
     /** Prefills a *new* entry (amount, kind, category, note) from it, timestamped now. */
     template: Transaction? = null,
+    /** The add button this sheet was opened from, which it morphs out of and back into. */
+    origin: ScallopOrigin? = null,
     onSave: (Transaction) -> Unit,
     onDelete: (Transaction) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    val currentOnDismiss by rememberUpdatedState(onDismiss)
+    val motion = remember { ScallopMotion(grown = origin == null) }
+    val sheetState = rememberModalBottomSheetState(
+        skipPartiallyExpanded = true,
+        confirmValueChange = { motion.confirm(it) },
+    )
+    val shrinkSpec = remember { spring<Float>(dampingRatio = 1f, stiffness = 650f, visibilityThreshold = 0.001f) }
+
+    // Shrinks back into the button, hands over to it and only then lets the sheet go, so the
+    // scrim and sheet vanish with nothing left to show.
+    fun shrink(then: () -> Unit = {}) {
+        if (origin == null || motion.shrinking) return
+        motion.shrinking = true
+        scope.launch {
+            // A settling spring spends its last stretch creeping through sub-pixel changes;
+            // waiting that out reads as a pause before the button wakes, so hand over as soon
+            // as the scallop has visibly arrived.
+            launch { motion.grow.animateTo(0f, shrinkSpec) }
+            snapshotFlow { motion.grow.value }.first { it <= HandoverAt }
+            motion.grow.snapTo(0f)
+            origin.covered = false
+            Haptics.fabToggle(context, opening = false)
+            then()
+            currentOnDismiss()
+        }
+    }
+
+    if (origin != null) {
+        motion.onShrinkRequest = { shrink() }
+        val growSpec = MaterialTheme.motionScheme.defaultSpatialSpec<Float>()
+        LaunchedEffect(Unit) {
+            // The sheet snaps into place invisibly (see SnapInMotion) while the scallop starts
+            // growing. Growth starts right away rather than once the sheet reports it has
+            // settled, and with a push rather than from rest: a spring from rest spends its
+            // first frames barely moving, which reads as lag after the tap.
+            launch { motion.grow.animateTo(1f, growSpec, initialVelocity = GrowKick) }
+            // The button only steps aside once the sheet is really on screen, so it can't
+            // blink out a frame early.
+            snapshotFlow { sheetState.currentValue }.first { it == SheetValue.Expanded }
+            origin.covered = true
+        }
+        DisposableEffect(Unit) { onDispose { origin.covered = false } }
+    }
+
     fun close(then: () -> Unit) {
+        if (origin != null) return shrink(then)
         scope.launch { sheetState.hide() }.invokeOnCompletion {
             then()
             onDismiss()
         }
     }
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = sheetState,
-        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-    ) {
+
+    val content: @Composable ColumnScope.() -> Unit = {
         EntryContent(
             initialKind = initialKind,
             editing = editing,
@@ -159,7 +267,251 @@ fun EntrySheet(
             onDelete = { close { onDelete(it) } },
         )
     }
+
+    if (origin == null) {
+        ModalBottomSheet(
+            onDismissRequest = onDismiss,
+            sheetState = sheetState,
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+            content = content,
+        )
+        return
+    }
+
+    // A bottom sheet slides up from the edge, and nothing can be drawn over its scrim from
+    // here, so the scallop has to live inside the sheet: it lands instantly and transparent,
+    // and the scallop, clipped to the sheet, grows from the button's spot to fill it.
+    val theme = MaterialTheme.motionScheme
+    val haptics = LocalHapticFeedback.current
+    val settleSpec = theme.defaultSpatialSpec<Float>()
+    val flingVelocity = with(LocalDensity.current) { 600.dp.toPx() }
+    val settled = sheetState.currentValue == SheetValue.Expanded
+    val sheetMotion = remember(theme) { SnapInMotion(theme) }
+    val scrim = BottomSheetDefaults.ScrimColor
+    MaterialTheme(
+        colorScheme = MaterialTheme.colorScheme,
+        motionScheme = if (settled) theme else sheetMotion,
+        shapes = MaterialTheme.shapes,
+        typography = MaterialTheme.typography,
+    ) {
+        ModalBottomSheet(
+            onDismissRequest = onDismiss,
+            sheetState = sheetState,
+            containerColor = Color.Transparent,
+            contentColor = MaterialTheme.colorScheme.onSurface,
+            scrimColor = scrim.copy(alpha = scrim.alpha * motion.grow.value.coerceIn(0f, 1f)),
+            dragHandle = null,
+            contentWindowInsets = { WindowInsets(0) },
+            // ScallopFrame takes the drag instead, so pulling down un-grows the scallop.
+            sheetGesturesEnabled = false,
+        ) {
+            MaterialTheme(
+                colorScheme = MaterialTheme.colorScheme,
+                motionScheme = theme,
+                shapes = MaterialTheme.shapes,
+                typography = MaterialTheme.typography,
+            ) {
+                ScallopFrame(
+                    origin = origin,
+                    grow = motion.grow::value,
+                    onPull = { progress ->
+                        if (!motion.shrinking) {
+                            if (motion.grow.value >= PullDismissAt && progress < PullDismissAt) {
+                                haptics.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
+                            }
+                            scope.launch { motion.grow.snapTo(progress) }
+                        }
+                    },
+                    onRelease = { velocity ->
+                        if (motion.grow.value < PullDismissAt || velocity > flingVelocity) shrink()
+                        else if (!motion.shrinking) scope.launch { motion.grow.animateTo(1f, settleSpec) }
+                    },
+                    onDismissAction = { shrink() },
+                ) {
+                    Column(Modifier.windowInsetsPadding(BottomSheetDefaults.modalWindowInsets)) {
+                        Box(Modifier.align(Alignment.CenterHorizontally)) { BottomSheetDefaults.DragHandle() }
+                        content()
+                    }
+                }
+            }
+        }
+    }
 }
+
+/**
+ * The sheet's own motion, minus its slide-up: [MaterialTheme.motionScheme]'s default spatial
+ * spec is what a bottom sheet shows itself with, and snapping it makes the sheet appear in
+ * place for the scallop to fill. Only in force until the sheet has settled, so dragging it
+ * afterwards moves as usual.
+ */
+private class SnapInMotion(base: MotionScheme) : MotionScheme by base {
+    override fun <T> defaultSpatialSpec(): FiniteAnimationSpec<T> = snap()
+}
+
+/**
+ * Morph progress, and the veto that routes back presses and scrim taps into shrinking the
+ * sheet into the button rather than letting the sheet hide itself.
+ */
+private class ScallopMotion(grown: Boolean) {
+    val grow = Animatable(if (grown) 1f else 0f)
+    var shrinking = false
+    var onShrinkRequest: () -> Unit = {}
+
+    fun confirm(value: SheetValue): Boolean {
+        if (value != SheetValue.Hidden) return true
+        onShrinkRequest()
+        return false
+    }
+}
+
+/** Below this much growth a released pull carries on into the button instead of springing back. */
+private const val PullDismissAt = 0.6f
+
+/** Growth at which a shrinking scallop is close enough to the button to hand over to it. */
+private const val HandoverAt = 0.02f
+
+/** Initial growth velocity, in progress per second, so the scallop moves on the first frame. */
+private const val GrowKick = 4f
+
+/**
+ * Draws the sheet's background as a scallop growing out of the add button into the sheet's
+ * rounded-top outline, clipping the contents to it. The contents fade in over the last stretch
+ * so the keypad doesn't flash through a half-formed blob. Once fully grown it's a plain
+ * rounded rect, so a settled sheet costs nothing extra per frame.
+ */
+@Composable
+private fun ScallopFrame(
+    origin: ScallopOrigin,
+    grow: () -> Float,
+    /** Called with the growth a downward pull has wound the scallop back to. */
+    onPull: (Float) -> Unit,
+    /** Called with the downward fling velocity, in px/s, when the pull ends. */
+    onRelease: (Float) -> Unit,
+    onDismissAction: () -> Unit,
+    content: @Composable () -> Unit,
+) {
+    val surface = MaterialTheme.colorScheme.surfaceContainerLow
+    val plus = rememberVectorPainter(Icons.Rounded.Add)
+    val placed = remember { arrayOfNulls<LayoutCoordinates>(1) }
+    val lift = with(LocalDensity.current) { 24.dp.toPx() }
+    val currentOnPull by rememberUpdatedState(onPull)
+    val currentOnRelease by rememberUpdatedState(onRelease)
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .onPlaced { placed[0] = it }
+            .pointerInput(Unit) {
+                // The pull is mapped so the sheet's top edge tracks the finger: shrinking
+                // brings that edge down to the button's top, so that's a full pull's travel.
+                var startGrow = 1f
+                var pulled = 0f
+                var travel = 1f
+                val velocity = VelocityTracker()
+                detectVerticalDragGestures(
+                    onDragStart = {
+                        startGrow = grow()
+                        pulled = 0f
+                        velocity.resetTracking()
+                        val coords = placed[0]
+                        val fabTop = if (coords != null && coords.isAttached && origin.centerOnScreen.isSpecified) {
+                            coords.screenToLocal(origin.centerOnScreen).y - origin.diameter / 2
+                        } else size.height.toFloat()
+                        travel = fabTop.coerceAtLeast(1f)
+                    },
+                    onDragEnd = { currentOnRelease(velocity.calculateVelocity().y) },
+                    onDragCancel = { currentOnRelease(0f) },
+                ) { change, dragAmount ->
+                    change.consume()
+                    velocity.addPointerInputChange(change)
+                    pulled += dragAmount
+                    currentOnPull((startGrow - pulled / travel).coerceIn(0f, 1f))
+                }
+            }
+            .semantics { dismiss { onDismissAction(); true } }
+            .drawWithCache {
+                val corner = SheetCorner.toPx()
+                val settled = Path().apply {
+                    addRoundRect(
+                        RoundRect(
+                            Rect(Offset.Zero, size),
+                            topLeft = CornerRadius(corner),
+                            topRight = CornerRadius(corner),
+                        )
+                    )
+                }
+                // The morph is built in sheet-width units and scaled up afterwards: in raw
+                // pixels, float error between neighbouring curve anchors outgrows the shapes
+                // library's contiguity tolerance and it throws.
+                val unit = size.width
+                val toPixels = Matrix().apply { scale(unit, unit) }
+                val sheet = RoundedPolygon.rectangle(
+                    width = 1f,
+                    height = size.height / unit,
+                    // Vertices run bottom-right, bottom-left, top-left, top-right.
+                    perVertexRounding = listOf(
+                        CornerRounding.Unrounded,
+                        CornerRounding.Unrounded,
+                        CornerRounding(corner / unit),
+                        CornerRounding(corner / unit),
+                    ),
+                    centerX = 0.5f,
+                    centerY = size.height / unit / 2,
+                )
+                val morphPath = Path()
+                onDrawWithContent {
+                    val p = grow().coerceIn(0f, 1f)
+                    val coords = placed[0]
+                    if (p >= 1f || coords == null || !coords.isAttached || !origin.centerOnScreen.isSpecified) {
+                        drawPath(settled, surface)
+                        drawContent()
+                        return@onDrawWithContent
+                    }
+                    val from = coords.screenToLocal(origin.centerOnScreen)
+                    val turn = Math.toRadians(origin.rotation().toDouble())
+                    val cos = cos(turn).toFloat()
+                    val sin = sin(turn).toFloat()
+                    val d = origin.diameter / unit
+                    val cx = from.x / unit
+                    val cy = from.y / unit
+                    // Rebuilt per frame so the scallop keeps its live spin while it grows;
+                    // matching a 12-sided cookie to a rectangle is cheap.
+                    val scallop = MaterialShapes.Cookie12Sided.transformed { x, y ->
+                        val dx = (x - 0.5f) * d
+                        val dy = (y - 0.5f) * d
+                        TransformResult(cx + dx * cos - dy * sin, cy + dx * sin + dy * cos)
+                    }
+                    Morph(scallop, sheet).toPath(p, morphPath)
+                    morphPath.transform(toPixels)
+                    drawPath(morphPath, lerp(origin.color, surface, (p / 0.7f).coerceAtMost(1f)))
+                    clipPath(morphPath) { this@onDrawWithContent.drawContent() }
+
+                    // The button's plus, twisting away as the scallop opens up.
+                    val plusAlpha = 1f - p / 0.25f
+                    if (plusAlpha > 0f) {
+                        val icon = 30.dp.toPx()
+                        rotate(90f * p / 0.25f, from) {
+                            translate(from.x - icon / 2, from.y - icon / 2) {
+                                with(plus) {
+                                    draw(Size(icon, icon), alpha = plusAlpha, colorFilter = ColorFilter.tint(origin.iconColor))
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+    ) {
+        Box(
+            Modifier.graphicsLayer {
+                val shown = ((grow() - 0.55f) / 0.45f).coerceIn(0f, 1f)
+                alpha = shown
+                translationY = (1f - shown) * lift
+            }
+        ) { content() }
+    }
+}
+
+/** Matches [BottomSheetDefaults.ExpandedShape]'s top corners. */
+private val SheetCorner = 28.dp
 
 /** Up to 999,999,999.99, the same cap as before. */
 private const val MAX_DIGITS = 11

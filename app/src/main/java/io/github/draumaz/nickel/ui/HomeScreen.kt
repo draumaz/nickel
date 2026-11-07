@@ -85,7 +85,9 @@ import androidx.compose.material3.animateFloatingActionButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
-import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.material3.toShape
 import androidx.compose.runtime.Composable
@@ -117,7 +119,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
-import androidx.graphics.shapes.Morph
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.draumaz.nickel.BuildConfig
 import io.github.draumaz.nickel.R
@@ -126,7 +127,6 @@ import io.github.draumaz.nickel.data.Kind
 import io.github.draumaz.nickel.data.Money
 import io.github.draumaz.nickel.data.Transaction
 import io.github.draumaz.nickel.ui.components.CategoryBadge
-import io.github.draumaz.nickel.ui.components.MorphShape
 import io.github.draumaz.nickel.ui.components.RollingText
 import io.github.draumaz.nickel.ui.components.ScreenHeader
 import io.github.draumaz.nickel.ui.components.pressScale
@@ -186,7 +186,9 @@ fun HomeScreen(viewModel: NickelViewModel, onOpenSettings: () -> Unit) {
     var editing by remember { mutableStateOf<Transaction?>(null) }
     /** The transaction a swipe-right is cloning into a new entry, if any. */
     var cloning by remember { mutableStateOf<Transaction?>(null) }
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    /** Set when the add button opened the sheet, which then grows out of it. */
+    var fromFab by remember { mutableStateOf(false) }
+    val fabOrigin = remember { ScallopOrigin() }
 
     fun deleteWithUndo(t: Transaction) {
         viewModel.delete(t)
@@ -212,12 +214,13 @@ fun HomeScreen(viewModel: NickelViewModel, onOpenSettings: () -> Unit) {
             val fabVisible by remember { derivedStateOf { !state.loading && fabShownByScroll } }
             // New entries start as expenses; the sheet's switch flips to income.
             ScallopFab(
-                active = sheetKind != null && editing == null,
-                enabled = fabVisible,
+                origin = fabOrigin,
+                enabled = fabVisible && sheetKind == null,
                 onClick = {
                     Haptics.fabToggle(context, opening = true)
                     editing = null
                     cloning = null
+                    fromFab = true
                     sheetKind = Kind.EXPENSE
                 },
                 modifier = Modifier
@@ -309,6 +312,7 @@ fun HomeScreen(viewModel: NickelViewModel, onOpenSettings: () -> Unit) {
                         onClick = {
                             editing = it
                             cloning = null
+                            fromFab = false
                             sheetKind = it.kind
                         },
                         onDelete = {
@@ -319,6 +323,7 @@ fun HomeScreen(viewModel: NickelViewModel, onOpenSettings: () -> Unit) {
                             haptics.performHapticFeedback(HapticFeedbackType.Confirm)
                             editing = null
                             cloning = it
+                            fromFab = false
                             sheetKind = it.kind
                         },
                     )
@@ -329,16 +334,17 @@ fun HomeScreen(viewModel: NickelViewModel, onOpenSettings: () -> Unit) {
 
     sheetKind?.let { kind ->
         EntrySheet(
-            sheetState = sheetState,
             initialKind = kind,
             editing = editing,
             template = cloning,
+            origin = fabOrigin.takeIf { fromFab },
             customCategories = state.customCategories,
             onCreateCategory = viewModel::addCategory,
             onDismiss = {
                 sheetKind = null
                 editing = null
                 cloning = null
+                fromFab = false
             },
             onSave = { t ->
                 val isNew = editing == null
@@ -381,19 +387,18 @@ private fun LazyListScope.transactionList(
 
 /**
  * The add button: the same scalloped coin as the header mark, slowly turning. Tapping it
- * gives the spin a springy kick, and opening morphs the scallops into a circle while the
- * plus twists into a close icon.
+ * opens the entry sheet, which grows out of this scallop and shrinks back into it; the
+ * button reports where it is and how it's turned to [origin] for that, and steps aside while
+ * the sheet is drawing the scallop. Each handover gives the spin a springy kick.
  */
 @Composable
 private fun ScallopFab(
-    active: Boolean,
+    origin: ScallopOrigin,
     enabled: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val spatial = MaterialTheme.motionScheme.defaultSpatialSpec<Float>()
     val fast = MaterialTheme.motionScheme.fastSpatialSpec<Float>()
-    val effects = MaterialTheme.motionScheme.defaultEffectsSpec<Color>()
 
     val idle = rememberInfiniteTransition(label = "fabSpin")
     val idleRotation by idle.animateFloat(
@@ -401,64 +406,65 @@ private fun ScallopFab(
         infiniteRepeatable(tween(14_000, easing = LinearEasing)),
         label = "fabIdle",
     )
-    // Extra turn added on every tap; a low-damping spring lets it overshoot and settle.
+    // Extra turn added on every handover; a low-damping spring lets it overshoot and settle.
     val kick = remember { Animatable(0f) }
-    LaunchedEffect(active) {
+    val covered = origin.covered
+    LaunchedEffect(covered) {
         kick.animateTo(
             kick.value + 120f,
             spring(dampingRatio = 0.45f, stiffness = Spring.StiffnessLow),
         )
     }
 
-    val morphProgress by animateFloatAsState(if (active) 1f else 0f, spatial, label = "fabMorph")
-    val iconTurn by animateFloatAsState(if (active) 135f else 0f, spatial, label = "fabIcon")
-    val container by animateColorAsState(
-        if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primaryContainer,
-        effects,
-        label = "fabContainer",
-    )
-    val content by animateColorAsState(
-        if (active) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onPrimaryContainer,
-        effects,
-        label = "fabContent",
-    )
+    // Slightly see-through, so no shadow: one would show through as a dark disc. The icon
+    // stays opaque to keep its contrast over whatever scrolls underneath.
+    val container = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.88f)
+    val content = MaterialTheme.colorScheme.onPrimaryContainer
+    SideEffect {
+        origin.color = container
+        origin.iconColor = content
+        origin.rotation = { idleRotation + kick.value }
+    }
 
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val scale by animateFloatAsState(if (pressed) 0.88f else 1f, fast, label = "fabPress")
 
     val addLabel = stringResource(R.string.add_transaction)
-    val morph = remember { Morph(MaterialShapes.Cookie12Sided, MaterialShapes.Circle) }
+    val shape = MaterialShapes.Cookie12Sided.toShape()
     Box(
         modifier
             .size(68.dp)
-            .graphicsLayer { scaleX = scale; scaleY = scale }
+            .onGloballyPositioned {
+                origin.centerOnScreen = it.localToScreen(Offset(it.size.width / 2f, it.size.height / 2f))
+                origin.diameter = it.size.width.toFloat()
+            }
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+                alpha = if (covered) 0f else 1f
+            }
             .clickable(
                 interactionSource = interaction,
                 indication = null,
-                enabled = enabled,
+                enabled = enabled && !covered,
                 role = Role.Button,
                 onClick = onClick,
             )
             .semantics { contentDescription = addLabel },
         contentAlignment = Alignment.Center,
     ) {
-        // Slightly see-through, so no shadow: one would show through as a dark disc. The icon
-        // stays opaque to keep its contrast over whatever scrolls underneath.
-        val shape = MorphShape(morph, morphProgress)
         Box(
             Modifier
                 .matchParentSize()
                 .graphicsLayer { rotationZ = idleRotation + kick.value }
-                .background(container.copy(alpha = 0.88f), shape)
+                .background(container, shape)
         )
         Icon(
             Icons.Rounded.Add,
             contentDescription = null,
             tint = content,
-            modifier = Modifier
-                .size(30.dp)
-                .graphicsLayer { rotationZ = iconTurn },
+            modifier = Modifier.size(30.dp),
         )
     }
 }

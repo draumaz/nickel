@@ -8,7 +8,7 @@ Nickel: a single-module Android expense tracker (Kotlin, Jetpack Compose, Materi
 ./gradlew installDebug        # build and install the debug app on a connected device
 ./gradlew testDebugUnitTest   # run the JVM unit tests (the only tests)
 ./gradlew assembleRelease     # release build (R8-minified; signed with the debug key)
-./gradlew :baselineprofile:generateBaselineProfile   # regenerates app/src/release/generated/baselineProfiles/
+./gradlew :app:generateReleaseBaselineProfile   # regenerates app/src/release/generated/baselineProfiles/ (the task lives on :app, not :baselineprofile)
 ```
 
 Environment requirements (not checked in):
