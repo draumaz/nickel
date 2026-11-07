@@ -86,6 +86,7 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.material3.rememberSwipeToDismissBoxState
@@ -127,6 +128,9 @@ import io.github.draumaz.nickel.data.Kind
 import io.github.draumaz.nickel.data.Money
 import io.github.draumaz.nickel.data.Transaction
 import io.github.draumaz.nickel.ui.components.CategoryBadge
+import io.github.draumaz.nickel.ui.components.categoryContainer
+import io.github.draumaz.nickel.ui.components.onCategoryContainer
+import androidx.compose.ui.layout.LayoutCoordinates
 import io.github.draumaz.nickel.ui.components.RollingText
 import io.github.draumaz.nickel.ui.components.ScreenHeader
 import io.github.draumaz.nickel.ui.components.pressScale
@@ -186,9 +190,11 @@ fun HomeScreen(viewModel: NickelViewModel, onOpenSettings: () -> Unit) {
     var editing by remember { mutableStateOf<Transaction?>(null) }
     /** The transaction a swipe-right is cloning into a new entry, if any. */
     var cloning by remember { mutableStateOf<Transaction?>(null) }
-    /** Set when the add button opened the sheet, which then grows out of it. */
-    var fromFab by remember { mutableStateOf(false) }
+    /** The add button or row badge the open sheet grows out of; null for a plain sheet. */
+    var morphOrigin by remember { mutableStateOf<ScallopOrigin?>(null) }
     val fabOrigin = remember { ScallopOrigin() }
+    /** Shared by all rows: the tapped one fills it in, and only it reports while open. */
+    val rowOrigin = remember { ScallopOrigin() }
 
     fun deleteWithUndo(t: Transaction) {
         viewModel.delete(t)
@@ -220,7 +226,7 @@ fun HomeScreen(viewModel: NickelViewModel, onOpenSettings: () -> Unit) {
                     Haptics.fabToggle(context, opening = true)
                     editing = null
                     cloning = null
-                    fromFab = true
+                    morphOrigin = fabOrigin
                     sheetKind = Kind.EXPENSE
                 },
                 modifier = Modifier
@@ -309,10 +315,12 @@ fun HomeScreen(viewModel: NickelViewModel, onOpenSettings: () -> Unit) {
                     else -> transactionList(
                         transactions = state.transactions,
                         badgeTurn = badgeTurn,
+                        rowOrigin = rowOrigin,
+                        originId = editing?.id.takeIf { morphOrigin === rowOrigin },
                         onClick = {
                             editing = it
                             cloning = null
-                            fromFab = false
+                            morphOrigin = rowOrigin
                             sheetKind = it.kind
                         },
                         onDelete = {
@@ -323,7 +331,7 @@ fun HomeScreen(viewModel: NickelViewModel, onOpenSettings: () -> Unit) {
                             haptics.performHapticFeedback(HapticFeedbackType.Confirm)
                             editing = null
                             cloning = it
-                            fromFab = false
+                            morphOrigin = null
                             sheetKind = it.kind
                         },
                     )
@@ -337,14 +345,14 @@ fun HomeScreen(viewModel: NickelViewModel, onOpenSettings: () -> Unit) {
             initialKind = kind,
             editing = editing,
             template = cloning,
-            origin = fabOrigin.takeIf { fromFab },
+            origin = morphOrigin,
             customCategories = state.customCategories,
             onCreateCategory = viewModel::addCategory,
             onDismiss = {
                 sheetKind = null
                 editing = null
                 cloning = null
-                fromFab = false
+                morphOrigin = null
             },
             onSave = { t ->
                 val isNew = editing == null
@@ -356,9 +364,15 @@ fun HomeScreen(viewModel: NickelViewModel, onOpenSettings: () -> Unit) {
     }
 }
 
+/** The category icon's size relative to its badge, as [CategoryBadge] draws it. */
+private const val BadgeIconScale = 0.46f
+
 private fun LazyListScope.transactionList(
     transactions: List<Transaction>,
     badgeTurn: State<Float>,
+    rowOrigin: ScallopOrigin,
+    /** The row whose badge the open sheet grew out of, if any. */
+    originId: Long?,
     onClick: (Transaction) -> Unit,
     onDelete: (Transaction) -> Unit,
     onClone: (Transaction) -> Unit,
@@ -374,6 +388,8 @@ private fun LazyListScope.transactionList(
                 transaction = t,
                 shape = segmentShape(index, items.size),
                 badgeTurn = badgeTurn,
+                origin = rowOrigin,
+                isOrigin = t.id == originId,
                 onClick = { onClick(t) },
                 onDelete = { onDelete(t) },
                 onClone = { onClone(t) },
@@ -827,6 +843,10 @@ private fun TransactionRow(
     transaction: Transaction,
     shape: RoundedCornerShape,
     badgeTurn: State<Float>,
+    /** Filled in with this row's badge when it's tapped, so the edit sheet grows out of it. */
+    origin: ScallopOrigin,
+    /** Whether the open sheet grew out of this row's badge; it then keeps [origin] current. */
+    isOrigin: Boolean,
     onClick: () -> Unit,
     onDelete: () -> Unit,
     onClone: () -> Unit,
@@ -842,6 +862,24 @@ private fun TransactionRow(
     // The same slow turn as the add button and coin, started at a different angle per row
     // so neighbouring shapes don't spin in lockstep.
     val phase = remember(transaction.id) { (transaction.id % 360).toFloat() }
+
+    val badgeColor = categoryContainer(transaction.category)
+    val badgeIconColor = onCategoryContainer(transaction.category)
+    val badgeAt = remember { arrayOfNulls<LayoutCoordinates>(1) }
+    val currentIsOrigin by rememberUpdatedState(isOrigin)
+    fun claimOrigin() {
+        val coords = badgeAt[0]?.takeIf { it.isAttached } ?: return
+        origin.centerOnScreen = coords.localToScreen(Offset(coords.size.width / 2f, coords.size.height / 2f))
+        origin.diameter = coords.size.width.toFloat()
+        origin.polygon = transaction.category.shape
+        origin.color = badgeColor
+        origin.icon = transaction.category.icon
+        origin.iconColor = badgeIconColor
+        origin.iconScale = BadgeIconScale
+        origin.iconTwist = 0f
+        origin.rotation = { phase + badgeTurn.value }
+    }
+    val badgeHidden = isOrigin && origin.covered
 
     SwipeToDismissBox(
         state = dismissState,
@@ -899,7 +937,10 @@ private fun TransactionRow(
     ) {
         val interaction = remember { MutableInteractionSource() }
         Surface(
-            onClick = onClick,
+            onClick = {
+                claimOrigin()
+                onClick()
+            },
             color = MaterialTheme.colorScheme.surfaceBright,
             interactionSource = interaction,
             modifier = Modifier
@@ -910,7 +951,21 @@ private fun TransactionRow(
                 Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                CategoryBadge(transaction.category, size = 44.dp, shapeRotation = { phase + badgeTurn.value })
+                CategoryBadge(
+                    transaction.category,
+                    size = 44.dp,
+                    shapeRotation = { phase + badgeTurn.value },
+                    containerColor = badgeColor,
+                    contentColor = badgeIconColor,
+                    // The sheet draws this badge itself while it grows out of it and shrinks
+                    // back in, so the row's own copy steps aside for that time.
+                    modifier = Modifier
+                        .onGloballyPositioned {
+                            badgeAt[0] = it
+                            if (currentIsOrigin) claimOrigin()
+                        }
+                        .graphicsLayer { alpha = if (badgeHidden) 0f else 1f },
+                )
                 Spacer(Modifier.width(16.dp))
                 Column(Modifier.weight(1f)) {
                     Text(

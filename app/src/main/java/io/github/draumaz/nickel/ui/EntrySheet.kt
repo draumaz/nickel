@@ -124,6 +124,14 @@ import kotlin.math.abs
 import kotlin.math.exp
 import kotlin.math.sign
 import kotlinx.coroutines.launch
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.positionInParent
 import androidx.compose.animation.core.FiniteAnimationSpec
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.spring
@@ -170,19 +178,26 @@ import kotlin.math.sin
 import kotlinx.coroutines.flow.first
 
 /**
- * Where the add button sits and how it looks right now, so a new-entry sheet can grow out of
- * it and shrink back into it. The button writes its geometry; the sheet flips [covered] while
- * it is drawing the scallop itself, and the button hides for that time so there's only ever
- * one of them on screen.
+ * Where a spinning shape the sheet grows out of sits and how it looks right now: the add
+ * button's scallop, or a ledger row's category badge. Its owner writes the geometry; the sheet
+ * flips [covered] while it is drawing the shape itself, and the owner hides its own copy for
+ * that time so there's only ever one of them on screen.
  */
 @Stable
 class ScallopOrigin {
-    /** The button's centre, in screen coordinates. */
+    /** The shape's centre, in screen coordinates. */
     var centerOnScreen = Offset.Unspecified
     var diameter = 0f
+    /** The shape's outline, normalized to a unit square like [MaterialShapes]' own. */
+    var polygon: RoundedPolygon = MaterialShapes.Cookie12Sided
     var color = Color.Unspecified
+    var icon: ImageVector = Icons.Rounded.Add
     var iconColor = Color.Unspecified
-    /** The button's live turn in degrees; read per frame so the scallop keeps spinning. */
+    /** The icon's size as a fraction of [diameter]. */
+    var iconScale = 0.44f
+    /** How far the icon twists, in degrees, as it fades out of the opening shape. */
+    var iconTwist = 90f
+    /** The shape's live turn in degrees; read per frame so it keeps spinning as it grows. */
     var rotation: () -> Float = { 0f }
     var covered by mutableStateOf(false)
 }
@@ -197,7 +212,7 @@ fun EntrySheet(
     onDismiss: () -> Unit,
     /** Prefills a *new* entry (amount, kind, category, note) from it, timestamped now. */
     template: Transaction? = null,
-    /** The add button this sheet was opened from, which it morphs out of and back into. */
+    /** The shape this sheet was opened from, which it morphs out of and back into. */
     origin: ScallopOrigin? = null,
     onSave: (Transaction) -> Unit,
     onDelete: (Transaction) -> Unit,
@@ -280,7 +295,8 @@ fun EntrySheet(
 
     // A bottom sheet slides up from the edge, and nothing can be drawn over its scrim from
     // here, so the scallop has to live inside the sheet: it lands instantly and transparent,
-    // and the scallop, clipped to the sheet, grows from the button's spot to fill it.
+    // and the scallop grows from its origin to fill it. The sheet spans the whole window
+    // (see ScallopFrame) so an origin high up the screen isn't clipped away.
     val theme = MaterialTheme.motionScheme
     val haptics = LocalHapticFeedback.current
     val settleSpec = theme.defaultSpatialSpec<Float>()
@@ -328,7 +344,9 @@ fun EntrySheet(
                     },
                     onDismissAction = { shrink() },
                 ) {
-                    Column(Modifier.windowInsetsPadding(BottomSheetDefaults.modalWindowInsets)) {
+                    // The frame spans the whole window, so only the bottom (nav bar, keyboard)
+                    // insets belong to the sheet itself.
+                    Column(Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))) {
                         Box(Modifier.align(Alignment.CenterHorizontally)) { BottomSheetDefaults.DragHandle() }
                         content()
                     }
@@ -374,16 +392,21 @@ private const val HandoverAt = 0.02f
 private const val GrowKick = 4f
 
 /**
- * Draws the sheet's background as a scallop growing out of the add button into the sheet's
- * rounded-top outline, clipping the contents to it. The contents fade in over the last stretch
- * so the keypad doesn't flash through a half-formed blob. Once fully grown it's a plain
- * rounded rect, so a settled sheet costs nothing extra per frame.
+ * Draws the sheet's background as a shape growing out of [origin] into the sheet's rounded-top
+ * outline, clipping the contents to it. The contents fade in over the last stretch so the
+ * keypad doesn't flash through a half-formed blob. Once fully grown it's a plain rounded rect,
+ * so a settled sheet costs nothing extra per frame.
+ *
+ * The frame fills the whole (transparent) sheet window with the visible sheet at its bottom:
+ * the sheet clips to its own bounds, and an origin above a shorter sheet's top edge, like a
+ * row near the top of the list, would otherwise start out clipped away. That also covers
+ * the sheet's own scrim, so taps above the visible sheet dismiss it here instead.
  */
 @Composable
 private fun ScallopFrame(
     origin: ScallopOrigin,
     grow: () -> Float,
-    /** Called with the growth a downward pull has wound the scallop back to. */
+    /** Called with the growth a downward pull has wound the shape back to. */
     onPull: (Float) -> Unit,
     /** Called with the downward fling velocity, in px/s, when the pull ends. */
     onRelease: (Float) -> Unit,
@@ -391,18 +414,26 @@ private fun ScallopFrame(
     content: @Composable () -> Unit,
 ) {
     val surface = MaterialTheme.colorScheme.surfaceContainerLow
-    val plus = rememberVectorPainter(Icons.Rounded.Add)
+    val icon = rememberVectorPainter(origin.icon)
     val placed = remember { arrayOfNulls<LayoutCoordinates>(1) }
+    /** The visible sheet's top edge within the frame; NaN until first placed. */
+    var sheetTop by remember { mutableFloatStateOf(Float.NaN) }
     val lift = with(LocalDensity.current) { 24.dp.toPx() }
     val currentOnPull by rememberUpdatedState(onPull)
     val currentOnRelease by rememberUpdatedState(onRelease)
+    val currentOnDismiss by rememberUpdatedState(onDismissAction)
     Box(
         Modifier
-            .fillMaxWidth()
+            .fillMaxSize()
             .onPlaced { placed[0] = it }
             .pointerInput(Unit) {
-                // The pull is mapped so the sheet's top edge tracks the finger: shrinking
-                // brings that edge down to the button's top, so that's a full pull's travel.
+                detectTapGestures { if (!sheetTop.isNaN() && it.y < sheetTop) currentOnDismiss() }
+            }
+            .pointerInput(Unit) {
+                // The pull is mapped so the sheet's top edge roughly tracks the finger:
+                // shrinking brings that edge down to the origin's top, so that's a full
+                // pull's travel. An origin up near the sheet's top (or above it) would make
+                // that tiny, so fall back to most of the sheet's height.
                 var startGrow = 1f
                 var pulled = 0f
                 var travel = 1f
@@ -412,11 +443,14 @@ private fun ScallopFrame(
                         startGrow = grow()
                         pulled = 0f
                         velocity.resetTracking()
+                        val top = if (sheetTop.isNaN()) 0f else sheetTop
+                        val sheetHeight = size.height - top
                         val coords = placed[0]
-                        val fabTop = if (coords != null && coords.isAttached && origin.centerOnScreen.isSpecified) {
+                        val originTop = if (coords != null && coords.isAttached && origin.centerOnScreen.isSpecified) {
                             coords.screenToLocal(origin.centerOnScreen).y - origin.diameter / 2
                         } else size.height.toFloat()
-                        travel = fabTop.coerceAtLeast(1f)
+                        val reach = originTop - top
+                        travel = if (reach > sheetHeight * 0.3f) reach else sheetHeight * 0.8f
                     },
                     onDragEnd = { currentOnRelease(velocity.calculateVelocity().y) },
                     onDragCancel = { currentOnRelease(0f) },
@@ -427,26 +461,28 @@ private fun ScallopFrame(
                     currentOnPull((startGrow - pulled / travel).coerceIn(0f, 1f))
                 }
             }
-            .semantics { dismiss { onDismissAction(); true } }
+            .semantics { dismiss { currentOnDismiss(); true } }
             .drawWithCache {
+                val top = sheetTop
                 val corner = SheetCorner.toPx()
+                val sheetHeight = (size.height - top).coerceAtLeast(2 * corner)
                 val settled = Path().apply {
-                    addRoundRect(
+                    if (!top.isNaN()) addRoundRect(
                         RoundRect(
-                            Rect(Offset.Zero, size),
+                            Rect(Offset(0f, top), Size(size.width, sheetHeight)),
                             topLeft = CornerRadius(corner),
                             topRight = CornerRadius(corner),
                         )
                     )
                 }
-                // The morph is built in sheet-width units and scaled up afterwards: in raw
+                // The morph is built in frame-width units and scaled up afterwards: in raw
                 // pixels, float error between neighbouring curve anchors outgrows the shapes
                 // library's contiguity tolerance and it throws.
                 val unit = size.width
                 val toPixels = Matrix().apply { scale(unit, unit) }
-                val sheet = RoundedPolygon.rectangle(
+                val sheet = if (top.isNaN()) null else RoundedPolygon.rectangle(
                     width = 1f,
-                    height = size.height / unit,
+                    height = sheetHeight / unit,
                     // Vertices run bottom-right, bottom-left, top-left, top-right.
                     perVertexRounding = listOf(
                         CornerRounding.Unrounded,
@@ -455,10 +491,11 @@ private fun ScallopFrame(
                         CornerRounding(corner / unit),
                     ),
                     centerX = 0.5f,
-                    centerY = size.height / unit / 2,
+                    centerY = (top + sheetHeight / 2) / unit,
                 )
                 val morphPath = Path()
                 onDrawWithContent {
+                    if (sheet == null) return@onDrawWithContent
                     val p = grow().coerceIn(0f, 1f)
                     val coords = placed[0]
                     if (p >= 1f || coords == null || !coords.isAttached || !origin.centerOnScreen.isSpecified) {
@@ -473,39 +510,45 @@ private fun ScallopFrame(
                     val d = origin.diameter / unit
                     val cx = from.x / unit
                     val cy = from.y / unit
-                    // Rebuilt per frame so the scallop keeps its live spin while it grows;
-                    // matching a 12-sided cookie to a rectangle is cheap.
-                    val scallop = MaterialShapes.Cookie12Sided.transformed { x, y ->
+                    // Rebuilt per frame so the shape keeps its live spin while it grows;
+                    // matching a small polygon to a rectangle is cheap.
+                    val start = origin.polygon.transformed { x, y ->
                         val dx = (x - 0.5f) * d
                         val dy = (y - 0.5f) * d
                         TransformResult(cx + dx * cos - dy * sin, cy + dx * sin + dy * cos)
                     }
-                    Morph(scallop, sheet).toPath(p, morphPath)
+                    Morph(start, sheet).toPath(p, morphPath)
                     morphPath.transform(toPixels)
                     drawPath(morphPath, lerp(origin.color, surface, (p / 0.7f).coerceAtMost(1f)))
                     clipPath(morphPath) { this@onDrawWithContent.drawContent() }
 
-                    // The button's plus, twisting away as the scallop opens up.
-                    val plusAlpha = 1f - p / 0.25f
-                    if (plusAlpha > 0f) {
-                        val icon = 30.dp.toPx()
-                        rotate(90f * p / 0.25f, from) {
-                            translate(from.x - icon / 2, from.y - icon / 2) {
-                                with(plus) {
-                                    draw(Size(icon, icon), alpha = plusAlpha, colorFilter = ColorFilter.tint(origin.iconColor))
+                    // The origin's icon (the button's plus, a badge's category), fading out
+                    // as the shape opens up.
+                    val iconAlpha = 1f - p / 0.25f
+                    if (iconAlpha > 0f) {
+                        val side = origin.diameter * origin.iconScale
+                        rotate(origin.iconTwist * p / 0.25f, from) {
+                            translate(from.x - side / 2, from.y - side / 2) {
+                                with(icon) {
+                                    draw(Size(side, side), alpha = iconAlpha, colorFilter = ColorFilter.tint(origin.iconColor))
                                 }
                             }
                         }
                     }
                 }
             },
+        contentAlignment = Alignment.BottomCenter,
     ) {
         Box(
-            Modifier.graphicsLayer {
-                val shown = ((grow() - 0.55f) / 0.45f).coerceIn(0f, 1f)
-                alpha = shown
-                translationY = (1f - shown) * lift
-            }
+            Modifier
+                .fillMaxWidth()
+                // Ahead of the layer below, so the fade-in lift doesn't move the edge.
+                .onPlaced { sheetTop = it.positionInParent().y }
+                .graphicsLayer {
+                    val shown = ((grow() - 0.55f) / 0.45f).coerceIn(0f, 1f)
+                    alpha = shown
+                    translationY = (1f - shown) * lift
+                }
         ) { content() }
     }
 }
