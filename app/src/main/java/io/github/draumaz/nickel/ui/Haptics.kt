@@ -39,7 +39,7 @@ object Haptics {
             vibrator.areAllPrimitivesSupported(PRIMITIVE_CLICK, PRIMITIVE_THUD) ->
                 VibrationEffect.startComposition()
                     .addPrimitive(PRIMITIVE_CLICK, 1f)
-                    .addPrimitive(PRIMITIVE_THUD, 0.7f)
+                    .addPrimitive(PRIMITIVE_THUD, 1f)
                     .compose()
             vibrator.areAllPrimitivesSupported(PRIMITIVE_CLICK, PRIMITIVE_TICK) ->
                 VibrationEffect.startComposition()

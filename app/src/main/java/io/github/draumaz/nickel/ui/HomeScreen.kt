@@ -436,7 +436,7 @@ private fun ScallopFab(
             // A save slams the sheet back in: take the hit, then whip round harder.
             origin.slam = false
             launch { squash.slamLanding() }
-            kick.animateTo(kick.value + 200f, SlamSpin)
+            kick.animateTo(kick.value + SlamTurn, SlamSpin)
         } else {
             kick.animateTo(
                 kick.value + 120f,
@@ -469,8 +469,7 @@ private fun ScallopFab(
                 origin.diameter = it.size.width.toFloat()
             }
             .graphicsLayer {
-                scaleX = scale * squash.value
-                scaleY = scale * squash.value
+                squashAndStretch(squash.value, scale)
                 alpha = if (covered) 0f else 1f
             }
             .clickable(
@@ -911,7 +910,7 @@ private fun TransactionRow(
         if (landed && origin.slam) {
             origin.slam = false
             launch { badgeSquash.slamLanding() }
-            badgeSlamTurn.animateTo(badgeSlamTurn.value + 200f, SlamSpin)
+            badgeSlamTurn.animateTo(badgeSlamTurn.value + SlamTurn, SlamSpin)
         }
     }
     val currentOnDelete by rememberUpdatedState(onDelete)
@@ -1024,8 +1023,7 @@ private fun TransactionRow(
                         }
                         .graphicsLayer {
                             alpha = if (badgeHidden) 0f else 1f
-                            scaleX = badgeSquash.value
-                            scaleY = badgeSquash.value
+                            squashAndStretch(badgeSquash.value)
                         },
                 )
                 Spacer(Modifier.width(16.dp))

@@ -186,6 +186,9 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.graphics.asAndroidPath
 import androidx.graphics.shapes.toPath as toAndroidPath
+import androidx.compose.ui.graphics.GraphicsLayerScope
+import androidx.compose.ui.graphics.TransformOrigin
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 
@@ -218,8 +221,8 @@ class ScallopOrigin {
      */
     var fliesToCategory = false
     /**
-     * Set just before [covered] drops when the sheet came back with a saved entry rather than
-     * being dismissed: the owner lands its shape with [slamLanding] instead of a soft settle, and
+     * Set just before [covered] drops when the shape comes back with momentum (every close but
+     * a delete): the owner lands its shape with [slamLanding] instead of a soft settle, and
      * clears this once it has.
      */
     var slam = false
@@ -248,7 +251,24 @@ class CategoryLanding {
     var rotation: () -> Float = { 0f }
     /** True while the badge is in the air; read at draw time. */
     var inFlight: () -> Boolean = { false }
+    /**
+     * Set by the landing chip: slams it as the badge hits. Called straight from the sheet's
+     * growth watcher rather than signalled through state, since every hop costs a frame, and
+     * a squash that starts frames after the hit reads as a soft landing then a separate bump.
+     */
+    var onLand: () -> Unit = {}
 }
+
+/**
+ * Growth at which a flying badge reaches its chip. Short of full growth on purpose: the sheet's
+ * growth eases to a stop, and a badge riding it all the way would drift onto the chip with no
+ * speed left to slam with. The sheet's content has finished fading in by here, so the chip it
+ * hits is solid.
+ */
+private const val FlightEnds = 0.8f
+
+/** A badge has to be pulled back this far off its chip before landing again slams it. */
+private const val FlightRearm = 0.6f
 
 internal val LocalCategoryLanding = staticCompositionLocalOf<CategoryLanding?> { null }
 
@@ -272,11 +292,25 @@ private fun RoundedPolygon.placed(cx: Float, cy: Float, diameter: Float, degrees
  */
 suspend fun Animatable<Float, AnimationVector1D>.slamLanding() {
     snapTo(1f)
-    animateTo(1f, spring(dampingRatio = 0.32f, stiffness = 700f), initialVelocity = -7f)
+    animateTo(1f, spring(dampingRatio = 0.3f, stiffness = 750f), initialVelocity = -10f)
+}
+
+/**
+ * Applies a [slamLanding] value as squash and stretch rather than a plain shrink: below 1 the
+ * shape flattens and spreads like it hit the floor, above 1 it springs up tall and narrow,
+ * roughly keeping its area either way. Pivoted low, so the hit reads as landing on something.
+ */
+fun GraphicsLayerScope.squashAndStretch(value: Float, scale: Float = 1f) {
+    transformOrigin = TransformOrigin(0.5f, 0.85f)
+    scaleY = scale * value
+    scaleX = scale * (1f + (1f - value) * 0.8f)
 }
 
 /** The extra turn a slammed shape whips through: quicker and stiffer than the soft kick. */
 val SlamSpin = spring<Float>(dampingRatio = 0.5f, stiffness = Spring.StiffnessMediumLow)
+
+/** How far a slam whips the shape round, in degrees. */
+const val SlamTurn = 300f
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -299,8 +333,21 @@ fun EntrySheet(
     val motion = remember { ScallopMotion(morphing = origin != null) }
     val landing = remember {
         if (origin?.fliesToCategory == true) {
-            CategoryLanding().apply { inFlight = { motion.grow.value < 1f } }
+            CategoryLanding().apply { inFlight = { motion.grow.value < FlightEnds } }
         } else null
+    }
+    if (landing != null) LaunchedEffect(landing) {
+        // Armed from the start (the badge sets off from the row), and re-armed only by a real
+        // pull back, so jitter around the landing point doesn't slam it over and over.
+        var armed = true
+        snapshotFlow { motion.grow.value }.collect { g ->
+            if (g < FlightRearm) armed = true
+            else if (armed && g >= FlightEnds && !motion.shrinking) {
+                armed = false
+                landing.onLand()
+                Haptics.slam(context)
+            }
+        }
     }
     val sheetState = rememberModalBottomSheetState(
         skipPartiallyExpanded = true,
@@ -314,7 +361,7 @@ fun EntrySheet(
     // it hits and the shape it lands in can take the impact (see [slamLanding]).
     val slamSpec = remember { tween<Float>(260, easing = CubicBezierEasing(0.45f, 0f, 0.9f, 0.45f)) }
 
-    fun shrink(slam: Boolean = false, then: () -> Unit = {}) {
+    fun shrink(slam: Boolean = true, then: () -> Unit = {}) {
         if (origin == null || motion.shrinking) return
         motion.shrinking = true
         scope.launch {
@@ -355,7 +402,7 @@ fun EntrySheet(
         DisposableEffect(Unit) { onDispose { origin.covered = false } }
     }
 
-    fun close(slam: Boolean = false, then: () -> Unit) {
+    fun close(slam: Boolean = true, then: () -> Unit) {
         if (origin != null) return shrink(slam, then)
         scope.launch { sheetState.hide() }.invokeOnCompletion {
             then()
@@ -375,7 +422,8 @@ fun EntrySheet(
                 landing?.target = t.category
                 close(slam = true) { onSave(t) }
             },
-            onDelete = { close { onDelete(it) } },
+            // The row is about to go, so there's nothing to slam into.
+            onDelete = { close(slam = false) { onDelete(it) } },
         )
         }
     }
@@ -493,7 +541,7 @@ private class ScallopMotion(private val morphing: Boolean) {
 private const val PullDismissAt = 0.6f
 
 /** How long a slam's squash gets the main thread to itself before the save is committed. */
-private const val SlamSettleMillis = 140L
+private const val SlamSettleMillis = 180L
 
 /** Growth at which a shrinking scallop is close enough to the button to hand over to it. */
 private const val HandoverAt = 0.02f
@@ -650,19 +698,21 @@ private fun ScallopFrame(
 
                     if (chip != null && flying != null) {
                         val to = coords.localPositionOf(chip, Offset(chip.size.width / 2f, chip.size.height / 2f))
-                        val at = androidx.compose.ui.geometry.lerp(from, to, p)
-                        val diameter = androidx.compose.ui.util.lerp(origin.diameter, chip.size.width * landing.scale(), p)
+                        val f = (p / FlightEnds).coerceAtMost(1f)
+                        if (f >= 1f) return@onDrawWithContent
+                        val at = androidx.compose.ui.geometry.lerp(from, to, f)
+                        val diameter = androidx.compose.ui.util.lerp(origin.diameter, chip.size.width * landing.scale(), f)
                         // The shorter way round, so a badge never whirls a full turn to line up.
                         val fromTurn = origin.rotation()
                         val delta = ((landing.rotation() - fromTurn) % 360f + 540f) % 360f - 180f
-                        flying.shape.placed(at.x / unit, at.y / unit, diameter / unit, fromTurn + delta * p)
+                        flying.shape.placed(at.x / unit, at.y / unit, diameter / unit, fromTurn + delta * f)
                             .toAndroidPath(flightPath.asAndroidPath().apply { rewind() })
                         flightPath.transform(toPixels)
-                        drawPath(flightPath, lerp(origin.color, landing.color, p))
+                        drawPath(flightPath, lerp(origin.color, landing.color, f))
                         val side = diameter * origin.iconScale
                         translate(at.x - side / 2, at.y - side / 2) {
                             with(flightIcon) {
-                                draw(Size(side, side), colorFilter = ColorFilter.tint(lerp(origin.iconColor, landing.iconColor, p)))
+                                draw(Size(side, side), colorFilter = ColorFilter.tint(lerp(origin.iconColor, landing.iconColor, f)))
                             }
                         }
                         return@onDrawWithContent
@@ -691,7 +741,8 @@ private fun ScallopFrame(
                 // Ahead of the layer below, so the fade-in lift doesn't move the edge.
                 .onPlaced { sheetTop = it.positionInParent().y }
                 .graphicsLayer {
-                    val shown = ((grow() - 0.55f) / 0.45f).coerceIn(0f, 1f)
+                    // Fully in by the time a flying badge lands (see FlightEnds).
+                    val shown = ((grow() - 0.4f) / (FlightEnds - 0.4f)).coerceIn(0f, 1f)
                     alpha = shown
                     translationY = (1f - shown) * lift
                 }
@@ -1241,17 +1292,25 @@ internal fun CategoryChip(
         label = "content",
     )
     val interaction = remember { MutableInteractionSource() }
+    // A badge flown in from the ledger lands with a slam, like one landing back in its row.
+    val squash = remember { Animatable(1f) }
+    val kick = remember { Animatable(0f) }
+    val scope = rememberCoroutineScope()
     // The category's own colours rather than the chip's current ones: a dismissal after
     // picking another category lands on an unselected (grey) chip, and the badge should
     // still look like the row's.
     val badgeColor = categoryContainer(category)
     val badgeIconColor = onCategoryContainer(category)
     if (landing != null) SideEffect {
+        landing.onLand = {
+            scope.launch(start = CoroutineStart.UNDISPATCHED) { squash.slamLanding() }
+            scope.launch(start = CoroutineStart.UNDISPATCHED) { kick.animateTo(kick.value + SlamTurn, SlamSpin) }
+        }
         landing.category = category
         landing.color = badgeColor
         landing.iconColor = badgeIconColor
         landing.scale = { scale }
-        landing.rotation = { rotation + phase + turn }
+        landing.rotation = { rotation + phase + turn + kick.value }
     }
 
     Column(
@@ -1268,13 +1327,12 @@ internal fun CategoryChip(
             shapeProgress = progress,
             containerColor = container,
             contentColor = content,
-            shapeRotation = { rotation + phase + turn },
+            shapeRotation = { rotation + phase + turn + kick.value },
             modifier = Modifier
                 // Ahead of the scale, so the landing sees the unscaled size it multiplies up.
                 .then(if (landing != null) Modifier.onGloballyPositioned { landing.coords = it } else Modifier)
                 .graphicsLayer {
-                    scaleX = scale
-                    scaleY = scale
+                    squashAndStretch(squash.value, scale)
                     alpha = if (landing?.inFlight?.invoke() == true) 0f else 1f
                 },
         )
