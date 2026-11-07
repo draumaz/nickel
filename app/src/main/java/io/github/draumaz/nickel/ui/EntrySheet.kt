@@ -189,6 +189,9 @@ import androidx.graphics.shapes.toPath as toAndroidPath
 import androidx.compose.ui.graphics.GraphicsLayerScope
 import androidx.compose.ui.graphics.TransformOrigin
 import kotlinx.coroutines.CoroutineStart
+import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
+import androidx.compose.foundation.gestures.snapping.SnapPosition
+import androidx.compose.foundation.layout.BoxWithConstraints
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 
@@ -750,6 +753,17 @@ private fun ScallopFrame(
     }
 }
 
+/** The category dial's bookkeeping, outside snapshot state since it's only read in effects. */
+private class DialState {
+    /** True while the dial turns itself, so the categories it sweeps past aren't picked. */
+    var steering = false
+    /** The category the user's swipe last picked, which the dial is already on. */
+    var picked: Category? = null
+}
+
+private val DialChipWidth = 76.dp
+private val DialGap = 4.dp
+
 /** Matches [BottomSheetDefaults.ExpandedShape]'s top corners. */
 private val SheetCorner = 28.dp
 
@@ -969,37 +983,112 @@ private fun EntryContent(
             }
         }
 
-        // Categories.
+        // Categories, on a dial: whichever sits in the middle is the one picked. Swiping turns
+        // it a detent at a time and picks as it goes; tapping a category picks it and turns the
+        // dial to it. The "new" chip at the far end is a button and an end stop, not a pick.
         val categories = Categories.forKind(kind, customCategories)
-        // Opens already scrolled to the category, rather than gliding there, so a badge
-        // flying in from the ledger has a still target to land on.
-        val rowState = rememberLazyListState(initialFirstVisibleItemIndex = maxOf(0, categories.indexOf(category) - 1))
-        LaunchedEffect(kind) { rowState.animateScrollToItem(maxOf(0, categories.indexOf(category) - 1)) }
+        // Opens already turned to the category, rather than gliding there, so a badge flying
+        // in from the ledger has a still target to land on.
+        val rowState = rememberLazyListState(initialFirstVisibleItemIndex = maxOf(0, categories.indexOf(category)))
+        val dial = remember { DialState() }
+        val currentCategories by rememberUpdatedState(categories)
+        fun centred(): Int? {
+            val info = rowState.layoutInfo
+            val middle = (info.viewportStartOffset + info.viewportEndOffset) / 2
+            return info.visibleItemsInfo.minByOrNull { abs(it.offset + it.size / 2 - middle) }?.index
+        }
+        // Picks whatever the user's swipe brings to the middle, ticking at each detent. Turns
+        // the dial makes on its own (to a tapped category, a new kind) pass through other
+        // categories on the way and mustn't pick them.
+        LaunchedEffect(rowState) {
+            snapshotFlow { centred() }.collect { i ->
+                if (dial.steering || !rowState.isScrollInProgress || i == null) return@collect
+                val c = currentCategories.getOrNull(i) ?: return@collect
+                if (c != category) {
+                    dial.picked = c
+                    category = c
+                    haptics.performHapticFeedback(HapticFeedbackType.SegmentFrequentTick)
+                }
+            }
+        }
+        // Turns the dial to a category picked any other way: a tap, a kind switch, a new one.
+        LaunchedEffect(category, categories) {
+            val i = categories.indexOf(category)
+            // A swipe's own pick is already in the middle. Used up here, so the same category
+            // picked again later another way (say, after switching kind and back) still turns to it.
+            if (category == dial.picked) {
+                dial.picked = null
+                return@LaunchedEffect
+            }
+            if (i < 0) return@LaunchedEffect
+            dial.steering = true
+            try {
+                rowState.animateScrollToItem(i)
+            } finally {
+                dial.steering = false
+            }
+        }
+        // The end stop: a swipe that comes to rest on the "new" chip springs back.
+        LaunchedEffect(rowState) {
+            snapshotFlow { rowState.isScrollInProgress }.collect { scrolling ->
+                if (scrolling || dial.steering) return@collect
+                val i = centred() ?: return@collect
+                if (i >= currentCategories.size) {
+                    dial.steering = true
+                    try {
+                        rowState.animateScrollToItem(currentCategories.lastIndex.coerceAtLeast(0))
+                    } finally {
+                        dial.steering = false
+                    }
+                }
+            }
+        }
         val landing = LocalCategoryLanding.current
         if (landing != null && landing.target == null) SideEffect { landing.target = category }
-        LazyRow(
-            state = rowState,
-            contentPadding = PaddingValues(horizontal = 20.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            items(categories, key = { it.id }) { c ->
-                CategoryChip(
-                    category = c,
-                    selected = c == category,
-                    landing = landing.takeIf { c == (landing?.target ?: category) },
-                    onClick = {
-                        haptics.performHapticFeedback(HapticFeedbackType.SegmentFrequentTick)
-                        category = c
-                        focus.clearFocus()
-                    },
-                    modifier = Modifier.animateItem(),
-                )
+        BoxWithConstraints(Modifier.fillMaxWidth()) {
+            // Enough padding either side that the first and last chips can reach the middle.
+            val sidePad = ((maxWidth - DialChipWidth) / 2).coerceAtLeast(0.dp)
+            val density = LocalDensity.current
+            val pitch = with(density) { (DialChipWidth + DialGap).toPx() }
+            /** Shrinks, fades and tilts a chip by how far it sits from the middle, like a drum. */
+            fun Modifier.onDial(key: Any) = graphicsLayer {
+                val info = rowState.layoutInfo
+                val item = info.visibleItemsInfo.firstOrNull { it.key == key } ?: return@graphicsLayer
+                val middle = (info.viewportStartOffset + info.viewportEndOffset) / 2f
+                val steps = (item.offset + item.size / 2f - middle) / pitch
+                val away = abs(steps).coerceAtMost(2.5f)
+                scaleX = 1f - 0.14f * away
+                scaleY = scaleX
+                alpha = 1f - 0.3f * away
+                rotationY = (-steps * 22f).coerceIn(-55f, 55f)
+                cameraDistance = 10f * density.density * 72f
             }
-            item(key = "new") {
-                NewCategoryChip(
-                    onClick = { showNewCategory = true },
-                    modifier = Modifier.animateItem(),
-                )
+            LazyRow(
+                state = rowState,
+                contentPadding = PaddingValues(horizontal = sidePad),
+                horizontalArrangement = Arrangement.spacedBy(DialGap),
+                flingBehavior = rememberSnapFlingBehavior(rowState, SnapPosition.Center),
+            ) {
+                items(categories, key = { it.id }) { c ->
+                    CategoryChip(
+                        category = c,
+                        selected = c == category,
+                        landing = landing.takeIf { c == (landing?.target ?: category) },
+                        onClick = {
+                            haptics.performHapticFeedback(HapticFeedbackType.SegmentFrequentTick)
+                            dial.picked = null
+                            category = c
+                            focus.clearFocus()
+                        },
+                        modifier = Modifier.animateItem().onDial(c.id),
+                    )
+                }
+                item(key = "new") {
+                    NewCategoryChip(
+                        onClick = { showNewCategory = true },
+                        modifier = Modifier.animateItem().onDial("new"),
+                    )
+                }
             }
         }
 
