@@ -220,7 +220,7 @@ fun EntrySheet(
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val currentOnDismiss by rememberUpdatedState(onDismiss)
-    val motion = remember { ScallopMotion(grown = origin == null) }
+    val motion = remember { ScallopMotion(morphing = origin != null) }
     val sheetState = rememberModalBottomSheetState(
         skipPartiallyExpanded = true,
         confirmValueChange = { motion.confirm(it) },
@@ -368,15 +368,17 @@ private class SnapInMotion(base: MotionScheme) : MotionScheme by base {
 
 /**
  * Morph progress, and the veto that routes back presses and scrim taps into shrinking the
- * sheet into the button rather than letting the sheet hide itself.
+ * sheet into its origin rather than letting the sheet hide itself. A plain sheet (opened
+ * without an origin) has nothing to shrink into, so it must hide as usual: vetoing there leaves
+ * back, swipe-down and the scrim all dead.
  */
-private class ScallopMotion(grown: Boolean) {
-    val grow = Animatable(if (grown) 1f else 0f)
+private class ScallopMotion(private val morphing: Boolean) {
+    val grow = Animatable(if (morphing) 0f else 1f)
     var shrinking = false
     var onShrinkRequest: () -> Unit = {}
 
     fun confirm(value: SheetValue): Boolean {
-        if (value != SheetValue.Hidden) return true
+        if (!morphing || value != SheetValue.Hidden) return true
         onShrinkRequest()
         return false
     }

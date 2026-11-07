@@ -1,5 +1,10 @@
 package io.github.draumaz.nickel.ui
 
+import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.platform.LocalLayoutDirection
+import kotlin.math.abs
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.material3.SwipeToDismissBoxState
 import androidx.compose.ui.platform.LocalResources
 import io.github.draumaz.nickel.ui.components.localizedDateFormat
 import io.github.draumaz.nickel.ui.components.displayLabel
@@ -316,7 +321,7 @@ fun HomeScreen(viewModel: NickelViewModel, onOpenSettings: () -> Unit) {
                         transactions = state.transactions,
                         badgeTurn = badgeTurn,
                         rowOrigin = rowOrigin,
-                        originId = editing?.id.takeIf { morphOrigin === rowOrigin },
+                        originId = (editing ?: cloning)?.id.takeIf { morphOrigin === rowOrigin },
                         onClick = {
                             editing = it
                             cloning = null
@@ -331,7 +336,7 @@ fun HomeScreen(viewModel: NickelViewModel, onOpenSettings: () -> Unit) {
                             haptics.performHapticFeedback(HapticFeedbackType.Confirm)
                             editing = null
                             cloning = it
-                            morphOrigin = null
+                            morphOrigin = rowOrigin
                             sheetKind = it.kind
                         },
                     )
@@ -853,6 +858,7 @@ private fun TransactionRow(
     modifier: Modifier = Modifier,
 ) {
     val dismissState = rememberSwipeToDismissBoxState()
+    SwipeHaptics(dismissState)
     val scope = rememberCoroutineScope()
     val money = NickelTheme.money
     val timeFormatter = rememberTimeFormatter()
@@ -867,9 +873,14 @@ private fun TransactionRow(
     val badgeIconColor = onCategoryContainer(transaction.category)
     val badgeAt = remember { arrayOfNulls<LayoutCoordinates>(1) }
     val currentIsOrigin by rememberUpdatedState(isOrigin)
+    val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
     fun claimOrigin() {
         val coords = badgeAt[0]?.takeIf { it.isAttached } ?: return
-        origin.centerOnScreen = coords.localToScreen(Offset(coords.size.width / 2f, coords.size.height / 2f))
+        // Measured where the row rests, not where a swipe has dragged it: a clone claims
+        // this with the row still swiped off to the side, about to spring back.
+        val swipe = runCatching { dismissState.requireOffset() }.getOrDefault(0f) * if (rtl) -1 else 1
+        origin.centerOnScreen = coords.localToScreen(Offset(coords.size.width / 2f, coords.size.height / 2f)) -
+            Offset(swipe, 0f)
         origin.diameter = coords.size.width.toFloat()
         origin.polygon = transaction.category.shape
         origin.color = badgeColor
@@ -880,21 +891,45 @@ private fun TransactionRow(
         origin.rotation = { phase + badgeTurn.value }
     }
     val badgeHidden = isOrigin && origin.covered
+    val currentOnDelete by rememberUpdatedState(onDelete)
+    val currentOnClone by rememberUpdatedState(onClone)
+    val currentClaim by rememberUpdatedState<() -> Unit> { claimOrigin() }
+    // Kept stable on purpose: SwipeToDismissBox reruns this whenever the lambda changes while
+    // the row sits dismissed, and a clone recomposes the row (it becomes the sheet's origin)
+    // before it has sprung back, which fired the clone twice.
+    val onSwiped: (SwipeToDismissBoxValue) -> Unit = remember(dismissState) {
+        { value ->
+            when (value) {
+                SwipeToDismissBoxValue.EndToStart -> currentOnDelete()
+                // Cloning keeps the row: open the sheet and spring the row back into place.
+                // Already handled on release (below); if the swipe did settle all the way
+                // out, just bring the row back.
+                SwipeToDismissBoxValue.StartToEnd -> scope.launch { dismissState.reset() }
+                SwipeToDismissBoxValue.Settled -> Unit
+            }
+        }
+    }
+
+    // Cloning keeps the row, so there's no need to wait for it to finish sliding offscreen
+    // (the box only reports a dismissal once settled, a long invisible tail): as soon as a
+    // release commits to it, open the sheet and spring the row back into place. targetValue
+    // only flips once the finger lifts.
+    // (currentValue is no use as a guard: it tracks the nearest anchor, so it already reads
+    // dismissed once the drag passes halfway.)
+    LaunchedEffect(dismissState) {
+        snapshotFlow { dismissState.targetValue }.collect {
+            if (it == SwipeToDismissBoxValue.StartToEnd) {
+                currentClaim()
+                currentOnClone()
+                dismissState.reset()
+            }
+        }
+    }
 
     SwipeToDismissBox(
         state = dismissState,
         modifier = modifier.clip(shape),
-        onDismiss = {
-            when (it) {
-                SwipeToDismissBoxValue.EndToStart -> onDelete()
-                // Cloning keeps the row: open the sheet and spring the row back into place.
-                SwipeToDismissBoxValue.StartToEnd -> {
-                    onClone()
-                    scope.launch { dismissState.reset() }
-                }
-                SwipeToDismissBoxValue.Settled -> Unit
-            }
-        },
+        onDismiss = onSwiped,
         backgroundContent = {
             val cloning = dismissState.dismissDirection == SwipeToDismissBoxValue.StartToEnd
             val active = dismissState.targetValue != SwipeToDismissBoxValue.Settled
@@ -992,6 +1027,64 @@ private fun TransactionRow(
         }
     }
 }
+
+/**
+ * Makes the clone/delete swipe feel like it has detents: light ticks as the row is dragged
+ * toward the point where letting go would act, a firm click on crossing it, a softer tick
+ * on backing off below it, and a settling tick if released without acting. The action
+ * itself keeps its own confirm buzz.
+ */
+@Composable
+private fun SwipeHaptics(state: SwipeToDismissBoxState) {
+    val haptics = LocalHapticFeedback.current
+    val step = with(LocalDensity.current) { SwipeTickStep.toPx() }
+    val threshold = with(LocalDensity.current) { SwipeActThreshold.toPx() }
+    LaunchedEffect(state) {
+        var ticks = 0
+        var armed = false
+        var moving = false
+        /** Set once an action fires; the row's return trip isn't the finger's doing. */
+        var acted = false
+        snapshotFlow {
+            runCatching { abs(state.requireOffset()) }.getOrDefault(0f) to state.targetValue
+        }.collect { (offset, target) ->
+            // targetValue flips only when a release commits to acting (a clone then springs
+            // straight back), so it marks an action. currentValue can't: it tracks the nearest
+            // anchor and reads dismissed mid-drag.
+            if (target != SwipeToDismissBoxValue.Settled) acted = true
+            if (offset == 0f) {
+                // Back at rest: a soft landing if it was let go without acting, then start over.
+                if (moving && !acted) haptics.performHapticFeedback(HapticFeedbackType.GestureEnd)
+                ticks = 0
+                armed = false
+                moving = false
+                acted = false
+                return@collect
+            }
+            if (acted) return@collect
+            moving = true
+            // The state's targetValue only flips once the finger lifts, so judge "letting go
+            // now would act" from the distance against the same threshold it uses.
+            val nowArmed = offset >= threshold
+            when {
+                nowArmed && !armed -> haptics.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
+                !nowArmed && armed -> haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+                !nowArmed -> {
+                    val reached = (offset / step).toInt()
+                    if (reached > ticks) haptics.performHapticFeedback(HapticFeedbackType.SegmentFrequentTick)
+                    ticks = reached
+                }
+            }
+            armed = nowArmed
+        }
+    }
+}
+
+/** [SwipeToDismissBoxDefaults]' positional threshold: past it, letting go acts. */
+private val SwipeActThreshold = 56.dp
+
+/** Spacing of the detent ticks; four of them lead up to [SwipeActThreshold]. */
+private val SwipeTickStep = 14.dp
 
 @Composable
 private fun EmptyState(title: String, body: String, modifier: Modifier = Modifier) {
