@@ -193,6 +193,7 @@ import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
 import androidx.compose.foundation.gestures.snapping.SnapPosition
 import androidx.compose.foundation.layout.BoxWithConstraints
 import io.github.draumaz.nickel.data.NoteMemory
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 
@@ -903,6 +904,15 @@ private fun EntryContent(
     val source = editing ?: template
     val haptics = LocalHapticFeedback.current
     val focus = LocalFocusManager.current
+    val keyboard = LocalSoftwareKeyboardController.current
+    /**
+     * Puts the note keyboard away the moment the number pad is used: it covers most of the
+     * pad, and a finger on the pad means the note is done with.
+     */
+    fun leaveNote() {
+        keyboard?.hide()
+        focus.clearFocus()
+    }
 
     var kind by rememberSaveable { mutableStateOf(source?.kind ?: initialKind) }
     var input by rememberSaveable { mutableStateOf(source?.let { Money.toInput(it.amountCents) } ?: "") }
@@ -1192,6 +1202,7 @@ private fun EntryContent(
             KindSwipeHints(swipe, kind, gutter = 20.dp)
             Keypad(
                 onKey = { key ->
+                    leaveNote()
                     haptics.performHapticFeedback(HapticFeedbackType.KeyboardTap)
                     val next = applyKey(input, key)
                     if (next == input && key != '<') {
@@ -1201,6 +1212,7 @@ private fun EntryContent(
                     input = next
                 },
                 onClear = {
+                    leaveNote()
                     haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                     beforeLastKey = null
                     input = ""
