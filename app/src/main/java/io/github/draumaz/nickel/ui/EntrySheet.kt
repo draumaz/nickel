@@ -192,6 +192,7 @@ import kotlinx.coroutines.CoroutineStart
 import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
 import androidx.compose.foundation.gestures.snapping.SnapPosition
 import androidx.compose.foundation.layout.BoxWithConstraints
+import io.github.draumaz.nickel.data.NoteMemory
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 
@@ -323,6 +324,8 @@ fun EntrySheet(
     customCategories: List<Category>,
     onCreateCategory: (Category) -> Unit,
     onDismiss: () -> Unit,
+    /** Earlier notes' categories, which a matching note picks automatically. */
+    noteMemory: NoteMemory = NoteMemory.Empty,
     /** Prefills a *new* entry (amount, kind, category, note) from it, timestamped now. */
     template: Transaction? = null,
     /** The shape this sheet was opened from, which it morphs out of and back into. */
@@ -420,6 +423,7 @@ fun EntrySheet(
             editing = editing,
             template = template,
             customCategories = customCategories,
+            noteMemory = noteMemory,
             onCreateCategory = onCreateCategory,
             onSave = { t ->
                 landing?.target = t.category
@@ -761,6 +765,9 @@ private class DialState {
     var picked: Category? = null
 }
 
+/** How long typing has to pause before a note's past category is picked. */
+private const val NoteGuessDelayMillis = 300L
+
 private val DialChipWidth = 76.dp
 private val DialGap = 4.dp
 
@@ -886,6 +893,7 @@ private fun EntryContent(
     editing: Transaction?,
     template: Transaction?,
     customCategories: List<Category>,
+    noteMemory: NoteMemory,
     onCreateCategory: (Category) -> Unit,
     onSave: (Transaction) -> Unit,
     onDelete: (Transaction) -> Unit,
@@ -900,6 +908,14 @@ private fun EntryContent(
     var input by rememberSaveable { mutableStateOf(source?.let { Money.toInput(it.amountCents) } ?: "") }
     var category by rememberSaveable { mutableStateOf(source?.category ?: Categories.default(kind)) }
     var note by rememberSaveable { mutableStateOf(source?.note ?: "") }
+    // Typing a note seen before picks the category it was last filed under (see the effect
+    // below). Only typed notes count, not one prefilled from an edit or clone, and a category
+    // or kind the user picks themselves always wins over a guess.
+    var noteTyped by rememberSaveable { mutableStateOf(false) }
+    var userPicked by rememberSaveable { mutableStateOf(false) }
+    var userKind by rememberSaveable { mutableStateOf(false) }
+    /** What a guess replaced, put back if the note stops matching. */
+    var beforeGuess by remember { mutableStateOf<Pair<Kind, Category>?>(null) }
     var timestamp by rememberSaveable { mutableLongStateOf(editing?.timestamp ?: System.currentTimeMillis()) }
     var showDatePicker by remember { mutableStateOf(false) }
     var showTimePicker by remember { mutableStateOf(false) }
@@ -919,9 +935,33 @@ private fun EntryContent(
 
     fun selectKind(k: Kind) {
         if (kind == k) return
+        userKind = true
         haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
         kind = k
         if (category.kind != k) category = Categories.default(k)
+    }
+
+    LaunchedEffect(note) {
+        if (!noteTyped || userPicked) return@LaunchedEffect
+        // Waits for a pause in typing, so the dial doesn't lurch at every prefix that happens
+        // to be some other note ("Lime" on the way to "Limestone").
+        delay(NoteGuessDelayMillis)
+        // A kind the user chose themselves stays put; otherwise an income note typed on an
+        // expense switches it over, since the note says what this entry is.
+        val match = noteMemory.lookup(note, kind, anyKind = !userKind, excluding = editing?.id)
+        if (match != null) {
+            if (match.kind == kind && match.category == category) return@LaunchedEffect
+            if (beforeGuess == null) beforeGuess = kind to category
+            kind = match.kind
+            category = match.category
+            haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+        } else {
+            beforeGuess?.let { (k, c) ->
+                kind = k
+                category = c
+            }
+            beforeGuess = null
+        }
     }
 
     Column(
@@ -1006,6 +1046,7 @@ private fun EntryContent(
                 val c = currentCategories.getOrNull(i) ?: return@collect
                 if (c != category) {
                     dial.picked = c
+                    userPicked = true
                     category = c
                     haptics.performHapticFeedback(HapticFeedbackType.SegmentFrequentTick)
                 }
@@ -1077,6 +1118,7 @@ private fun EntryContent(
                         onClick = {
                             haptics.performHapticFeedback(HapticFeedbackType.SegmentFrequentTick)
                             dial.picked = null
+                            userPicked = true
                             category = c
                             focus.clearFocus()
                         },
@@ -1104,7 +1146,10 @@ private fun EntryContent(
         ) {
             TextField(
                 value = note,
-                onValueChange = { note = it.take(60) },
+                onValueChange = {
+                    noteTyped = true
+                    note = it.take(60)
+                },
                 placeholder = { Text(stringResource(R.string.add_note)) },
                 singleLine = true,
                 shape = RoundedCornerShape(20.dp),
@@ -1236,6 +1281,7 @@ private fun EntryContent(
             onCreate = { created, isNew ->
                 haptics.performHapticFeedback(HapticFeedbackType.Confirm)
                 if (isNew) onCreateCategory(created)
+                userPicked = true
                 category = created
                 showNewCategory = false
             },

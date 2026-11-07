@@ -14,6 +14,7 @@ import io.github.draumaz.nickel.data.ImportException
 import io.github.draumaz.nickel.data.ImportPlan
 import io.github.draumaz.nickel.data.Kind
 import io.github.draumaz.nickel.data.LedgerCsv
+import io.github.draumaz.nickel.data.NoteMemory
 import io.github.draumaz.nickel.data.Settings
 import io.github.draumaz.nickel.data.SettingsRepository
 import io.github.draumaz.nickel.data.Transaction
@@ -33,6 +34,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -146,6 +148,13 @@ class NickelViewModel(app: Application) : AndroidViewModel(app) {
         // import: keep that off the main thread so filter taps don't drop frames.
         .flowOn(Dispatchers.Default)
         .stateIn(viewModelScope, SharingStarted.Eagerly, HomeState())
+
+    /** Which category each note was last filed under, for the entry sheet to suggest from. */
+    val noteMemory: StateFlow<NoteMemory> = repository.ledger
+        .filterNotNull()
+        .map { NoteMemory.of(it.transactions) }
+        .flowOn(Dispatchers.Default)
+        .stateIn(viewModelScope, SharingStarted.Eagerly, NoteMemory.Empty)
 
     init {
         viewModelScope.launch { repository.load() }

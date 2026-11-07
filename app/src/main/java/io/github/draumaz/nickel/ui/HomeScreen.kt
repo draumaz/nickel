@@ -346,12 +346,14 @@ fun HomeScreen(viewModel: NickelViewModel, onOpenSettings: () -> Unit) {
     }
 
     sheetKind?.let { kind ->
+        val noteMemory by viewModel.noteMemory.collectAsStateWithLifecycle()
         EntrySheet(
             initialKind = kind,
             editing = editing,
             template = cloning,
             origin = morphOrigin,
             customCategories = state.customCategories,
+            noteMemory = noteMemory,
             onCreateCategory = viewModel::addCategory,
             onDismiss = {
                 sheetKind = null
