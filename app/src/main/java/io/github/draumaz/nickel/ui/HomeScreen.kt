@@ -429,12 +429,20 @@ private fun ScallopFab(
     )
     // Extra turn added on every handover; a low-damping spring lets it overshoot and settle.
     val kick = remember { Animatable(0f) }
+    val squash = remember { Animatable(1f) }
     val covered = origin.covered
     LaunchedEffect(covered) {
-        kick.animateTo(
-            kick.value + 120f,
-            spring(dampingRatio = 0.45f, stiffness = Spring.StiffnessLow),
-        )
+        if (!covered && origin.slam) {
+            // A save slams the sheet back in: take the hit, then whip round harder.
+            origin.slam = false
+            launch { squash.slamLanding() }
+            kick.animateTo(kick.value + 200f, SlamSpin)
+        } else {
+            kick.animateTo(
+                kick.value + 120f,
+                spring(dampingRatio = 0.45f, stiffness = Spring.StiffnessLow),
+            )
+        }
     }
 
     // Slightly see-through, so no shadow: one would show through as a dark disc. The icon
@@ -461,8 +469,8 @@ private fun ScallopFab(
                 origin.diameter = it.size.width.toFloat()
             }
             .graphicsLayer {
-                scaleX = scale
-                scaleY = scale
+                scaleX = scale * squash.value
+                scaleY = scale * squash.value
                 alpha = if (covered) 0f else 1f
             }
             .clickable(
@@ -872,6 +880,8 @@ private fun TransactionRow(
     val badgeColor = categoryContainer(transaction.category)
     val badgeIconColor = onCategoryContainer(transaction.category)
     val badgeAt = remember { arrayOfNulls<LayoutCoordinates>(1) }
+    /** Extra turn from a slammed landing, on top of the shared slow spin. */
+    val badgeSlamTurn = remember { Animatable(0f) }
     val currentIsOrigin by rememberUpdatedState(isOrigin)
     val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
     fun claimOrigin() {
@@ -888,9 +898,22 @@ private fun TransactionRow(
         origin.iconColor = badgeIconColor
         origin.iconScale = BadgeIconScale
         origin.iconTwist = 0f
-        origin.rotation = { phase + badgeTurn.value }
+        origin.fliesToCategory = true
+        origin.rotation = { phase + badgeTurn.value + badgeSlamTurn.value }
     }
     val badgeHidden = isOrigin && origin.covered
+    // The badge takes the same slam as the add button when an edit is saved back into it.
+    val badgeSquash = remember { Animatable(1f) }
+    var wasHidden by remember { mutableStateOf(false) }
+    LaunchedEffect(badgeHidden) {
+        val landed = wasHidden && !badgeHidden
+        wasHidden = badgeHidden
+        if (landed && origin.slam) {
+            origin.slam = false
+            launch { badgeSquash.slamLanding() }
+            badgeSlamTurn.animateTo(badgeSlamTurn.value + 200f, SlamSpin)
+        }
+    }
     val currentOnDelete by rememberUpdatedState(onDelete)
     val currentOnClone by rememberUpdatedState(onClone)
     val currentClaim by rememberUpdatedState<() -> Unit> { claimOrigin() }
@@ -989,7 +1012,7 @@ private fun TransactionRow(
                 CategoryBadge(
                     transaction.category,
                     size = 44.dp,
-                    shapeRotation = { phase + badgeTurn.value },
+                    shapeRotation = { phase + badgeTurn.value + badgeSlamTurn.value },
                     containerColor = badgeColor,
                     contentColor = badgeIconColor,
                     // The sheet draws this badge itself while it grows out of it and shrinks
@@ -999,7 +1022,11 @@ private fun TransactionRow(
                             badgeAt[0] = it
                             if (currentIsOrigin) claimOrigin()
                         }
-                        .graphicsLayer { alpha = if (badgeHidden) 0f else 1f },
+                        .graphicsLayer {
+                            alpha = if (badgeHidden) 0f else 1f
+                            scaleX = badgeSquash.value
+                            scaleY = badgeSquash.value
+                        },
                 )
                 Spacer(Modifier.width(16.dp))
                 Column(Modifier.weight(1f)) {

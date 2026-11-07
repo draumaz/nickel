@@ -124,7 +124,9 @@ import kotlin.math.abs
 import kotlin.math.exp
 import kotlin.math.sign
 import kotlinx.coroutines.launch
-import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.only
@@ -135,6 +137,9 @@ import androidx.compose.ui.layout.positionInParent
 import androidx.compose.animation.core.FiniteAnimationSpec
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.AnimationVector1D
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.Spring
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.windowInsetsPadding
@@ -175,6 +180,13 @@ import androidx.graphics.shapes.TransformResult
 import androidx.graphics.shapes.rectangle
 import kotlin.math.cos
 import kotlin.math.sin
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.graphics.asAndroidPath
+import androidx.graphics.shapes.toPath as toAndroidPath
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 
 /**
@@ -200,7 +212,71 @@ class ScallopOrigin {
     /** The shape's live turn in degrees; read per frame so it keeps spinning as it grows. */
     var rotation: () -> Float = { 0f }
     var covered by mutableStateOf(false)
+    /**
+     * Whether this is a category badge, which flies onto the matching chip in the sheet's
+     * category carousel rather than dissolving into the sheet (see [CategoryLanding]).
+     */
+    var fliesToCategory = false
+    /**
+     * Set just before [covered] drops when the sheet came back with a saved entry rather than
+     * being dismissed: the owner lands its shape with [slamLanding] instead of a soft settle, and
+     * clears this once it has.
+     */
+    var slam = false
 }
+
+/**
+ * The selected chip in the entry sheet's category carousel, as a landing spot. A sheet opened
+ * from a ledger row's badge flies that badge across onto this chip while the sheet grows, and
+ * back off it when the sheet closes, so the category reads as one object that moved rather
+ * than one that vanished and another that appeared. The chip reports where it is and how it
+ * looks, and hides its own copy while the flying one is out.
+ */
+@Stable
+class CategoryLanding {
+    /**
+     * The category whose chip the badge lands on: the one it came from, so backing out after
+     * picking another category flies the row's own badge home, until a save points it at the
+     * category being saved. Null means the selected one.
+     */
+    var target by mutableStateOf<Category?>(null)
+    var coords: LayoutCoordinates? = null
+    var category by mutableStateOf<Category?>(null)
+    var color = Color.Unspecified
+    var iconColor = Color.Unspecified
+    var scale: () -> Float = { 1f }
+    var rotation: () -> Float = { 0f }
+    /** True while the badge is in the air; read at draw time. */
+    var inFlight: () -> Boolean = { false }
+}
+
+internal val LocalCategoryLanding = staticCompositionLocalOf<CategoryLanding?> { null }
+
+/** The polygon a unit-square [MaterialShapes]-style shape becomes when placed in frame units. */
+private fun RoundedPolygon.placed(cx: Float, cy: Float, diameter: Float, degrees: Float): RoundedPolygon {
+    val turn = Math.toRadians(degrees.toDouble())
+    val cos = cos(turn).toFloat()
+    val sin = sin(turn).toFloat()
+    return transformed { x, y ->
+        val dx = (x - 0.5f) * diameter
+        val dy = (y - 0.5f) * diameter
+        TransformResult(cx + dx * cos - dy * sin, cy + dx * sin + dy * cos)
+    }
+}
+
+/**
+ * The squash and rebound of a shape that has just been slammed back into place, as a scale
+ * factor animated from 1. It starts moving *inward*, carrying on the speed the shrinking sheet
+ * arrived with, so the dip reads as the impact rather than as a jump; a loose spring then lets
+ * it bounce past full size and settle.
+ */
+suspend fun Animatable<Float, AnimationVector1D>.slamLanding() {
+    snapTo(1f)
+    animateTo(1f, spring(dampingRatio = 0.32f, stiffness = 700f), initialVelocity = -7f)
+}
+
+/** The extra turn a slammed shape whips through: quicker and stiffer than the soft kick. */
+val SlamSpin = spring<Float>(dampingRatio = 0.5f, stiffness = Spring.StiffnessMediumLow)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -221,6 +297,11 @@ fun EntrySheet(
     val context = LocalContext.current
     val currentOnDismiss by rememberUpdatedState(onDismiss)
     val motion = remember { ScallopMotion(morphing = origin != null) }
+    val landing = remember {
+        if (origin?.fliesToCategory == true) {
+            CategoryLanding().apply { inFlight = { motion.grow.value < 1f } }
+        } else null
+    }
     val sheetState = rememberModalBottomSheetState(
         skipPartiallyExpanded = true,
         confirmValueChange = { motion.confirm(it) },
@@ -229,18 +310,29 @@ fun EntrySheet(
 
     // Shrinks back into the button, hands over to it and only then lets the sheet go, so the
     // scrim and sheet vanish with nothing left to show.
-    fun shrink(then: () -> Unit = {}) {
+    // A save slams home instead: it speeds up all the way in, so it still has its speed when
+    // it hits and the shape it lands in can take the impact (see [slamLanding]).
+    val slamSpec = remember { tween<Float>(260, easing = CubicBezierEasing(0.45f, 0f, 0.9f, 0.45f)) }
+
+    fun shrink(slam: Boolean = false, then: () -> Unit = {}) {
         if (origin == null || motion.shrinking) return
         motion.shrinking = true
         scope.launch {
             // A settling spring spends its last stretch creeping through sub-pixel changes;
             // waiting that out reads as a pause before the button wakes, so hand over as soon
             // as the scallop has visibly arrived.
-            launch { motion.grow.animateTo(0f, shrinkSpec) }
+            launch { motion.grow.animateTo(0f, if (slam) slamSpec else shrinkSpec) }
             snapshotFlow { motion.grow.value }.first { it <= HandoverAt }
             motion.grow.snapTo(0f)
+            motion.handedOver = true
+            origin.slam = slam
             origin.covered = false
-            Haptics.fabToggle(context, opening = false)
+            if (slam) Haptics.slam(context) else Haptics.fabToggle(context, opening = false)
+            // Saving recomposes the list and closing tears down the sheet's window, which can
+            // hold the main thread for several frames: right at the hit, that swallows the
+            // squash whole. Let the squash play first; the sheet is already invisible and the
+            // list update lands just after, as the shape bounces back.
+            if (slam) delay(SlamSettleMillis)
             then()
             currentOnDismiss()
         }
@@ -263,8 +355,8 @@ fun EntrySheet(
         DisposableEffect(Unit) { onDispose { origin.covered = false } }
     }
 
-    fun close(then: () -> Unit) {
-        if (origin != null) return shrink(then)
+    fun close(slam: Boolean = false, then: () -> Unit) {
+        if (origin != null) return shrink(slam, then)
         scope.launch { sheetState.hide() }.invokeOnCompletion {
             then()
             onDismiss()
@@ -272,15 +364,20 @@ fun EntrySheet(
     }
 
     val content: @Composable ColumnScope.() -> Unit = {
+        CompositionLocalProvider(LocalCategoryLanding provides landing) {
         EntryContent(
             initialKind = initialKind,
             editing = editing,
             template = template,
             customCategories = customCategories,
             onCreateCategory = onCreateCategory,
-            onSave = { close { onSave(it) } },
+            onSave = { t ->
+                landing?.target = t.category
+                close(slam = true) { onSave(t) }
+            },
             onDelete = { close { onDelete(it) } },
         )
+        }
     }
 
     if (origin == null) {
@@ -330,6 +427,8 @@ fun EntrySheet(
                 ScallopFrame(
                     origin = origin,
                     grow = motion.grow::value,
+                    handedOver = { motion.handedOver },
+                    landing = landing,
                     onPull = { progress ->
                         if (!motion.shrinking) {
                             if (motion.grow.value >= PullDismissAt && progress < PullDismissAt) {
@@ -375,6 +474,12 @@ private class SnapInMotion(base: MotionScheme) : MotionScheme by base {
 private class ScallopMotion(private val morphing: Boolean) {
     val grow = Animatable(if (morphing) 0f else 1f)
     var shrinking = false
+    /**
+     * Set the moment the shape is handed back to its origin. The sheet's window lingers a few
+     * frames before it goes, and drawing its last frame of the shape over the origin's own copy
+     * would hide the origin's landing (most visibly a slam's squash) until it went.
+     */
+    var handedOver by mutableStateOf(false)
     var onShrinkRequest: () -> Unit = {}
 
     fun confirm(value: SheetValue): Boolean {
@@ -386,6 +491,9 @@ private class ScallopMotion(private val morphing: Boolean) {
 
 /** Below this much growth a released pull carries on into the button instead of springing back. */
 private const val PullDismissAt = 0.6f
+
+/** How long a slam's squash gets the main thread to itself before the save is committed. */
+private const val SlamSettleMillis = 140L
 
 /** Growth at which a shrinking scallop is close enough to the button to hand over to it. */
 private const val HandoverAt = 0.02f
@@ -408,6 +516,10 @@ private const val GrowKick = 4f
 private fun ScallopFrame(
     origin: ScallopOrigin,
     grow: () -> Float,
+    /** Whether the shape has gone back to [origin]; draws nothing from then on. */
+    handedOver: () -> Boolean,
+    /** Where a category badge origin lands in the carousel, if it flies there. */
+    landing: CategoryLanding?,
     /** Called with the growth a downward pull has wound the shape back to. */
     onPull: (Float) -> Unit,
     /** Called with the downward fling velocity, in px/s, when the pull ends. */
@@ -417,6 +529,8 @@ private fun ScallopFrame(
 ) {
     val surface = MaterialTheme.colorScheme.surfaceContainerLow
     val icon = rememberVectorPainter(origin.icon)
+    val flightIcon = rememberVectorPainter(landing?.category?.icon ?: origin.icon)
+    val flightPath = remember { Path() }
     val placed = remember { arrayOfNulls<LayoutCoordinates>(1) }
     /** The visible sheet's top edge within the frame; NaN until first placed. */
     var sheetTop by remember { mutableFloatStateOf(Float.NaN) }
@@ -428,8 +542,17 @@ private fun ScallopFrame(
         Modifier
             .fillMaxSize()
             .onPlaced { placed[0] = it }
+            // Taps on the scrim above the sheet dismiss it. Not detectTapGestures: that consumes
+            // every down, including ones on the sheet, and the keypad reads a consumed touch as
+            // a swipe and takes the keystroke back. This only ever touches scrim taps.
             .pointerInput(Unit) {
-                detectTapGestures { if (!sheetTop.isNaN() && it.y < sheetTop) currentOnDismiss() }
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    if (sheetTop.isNaN() || down.position.y >= sheetTop) return@awaitEachGesture
+                    val up = waitForUpOrCancellation() ?: return@awaitEachGesture
+                    up.consume()
+                    currentOnDismiss()
+                }
             }
             .pointerInput(Unit) {
                 // The pull is mapped so the sheet's top edge roughly tracks the finger:
@@ -497,7 +620,7 @@ private fun ScallopFrame(
                 )
                 val morphPath = Path()
                 onDrawWithContent {
-                    if (sheet == null) return@onDrawWithContent
+                    if (sheet == null || handedOver()) return@onDrawWithContent
                     val p = grow().coerceIn(0f, 1f)
                     val coords = placed[0]
                     if (p >= 1f || coords == null || !coords.isAttached || !origin.centerOnScreen.isSpecified) {
@@ -506,23 +629,44 @@ private fun ScallopFrame(
                         return@onDrawWithContent
                     }
                     val from = coords.screenToLocal(origin.centerOnScreen)
-                    val turn = Math.toRadians(origin.rotation().toDouble())
-                    val cos = cos(turn).toFloat()
-                    val sin = sin(turn).toFloat()
-                    val d = origin.diameter / unit
-                    val cx = from.x / unit
-                    val cy = from.y / unit
+                    // A badge flying to the carousel needs its chip on screen to aim at; one
+                    // scrolled out of the carousel falls back to dissolving into the sheet.
+                    val chip = landing?.coords?.takeIf { origin.fliesToCategory && it.isAttached }
+                    val flying = landing?.category?.takeIf { chip != null }
                     // Rebuilt per frame so the shape keeps its live spin while it grows;
                     // matching a small polygon to a rectangle is cheap.
-                    val start = origin.polygon.transformed { x, y ->
-                        val dx = (x - 0.5f) * d
-                        val dy = (y - 0.5f) * d
-                        TransformResult(cx + dx * cos - dy * sin, cy + dx * sin + dy * cos)
-                    }
+                    val start = origin.polygon.placed(from.x / unit, from.y / unit, origin.diameter / unit, origin.rotation())
                     Morph(start, sheet).toPath(p, morphPath)
                     morphPath.transform(toPixels)
-                    drawPath(morphPath, lerp(origin.color, surface, (p / 0.7f).coerceAtMost(1f)))
+                    // Under a flying badge the sheet comes out from behind it in its own colour,
+                    // fading in as it clears the badge so it never shows as a dark rim around
+                    // it; otherwise the origin's colour turns into the sheet's as it opens.
+                    drawPath(
+                        morphPath,
+                        if (flying != null) surface.copy(alpha = surface.alpha * (p / 0.3f).coerceAtMost(1f))
+                        else lerp(origin.color, surface, (p / 0.7f).coerceAtMost(1f)),
+                    )
                     clipPath(morphPath) { this@onDrawWithContent.drawContent() }
+
+                    if (chip != null && flying != null) {
+                        val to = coords.localPositionOf(chip, Offset(chip.size.width / 2f, chip.size.height / 2f))
+                        val at = androidx.compose.ui.geometry.lerp(from, to, p)
+                        val diameter = androidx.compose.ui.util.lerp(origin.diameter, chip.size.width * landing.scale(), p)
+                        // The shorter way round, so a badge never whirls a full turn to line up.
+                        val fromTurn = origin.rotation()
+                        val delta = ((landing.rotation() - fromTurn) % 360f + 540f) % 360f - 180f
+                        flying.shape.placed(at.x / unit, at.y / unit, diameter / unit, fromTurn + delta * p)
+                            .toAndroidPath(flightPath.asAndroidPath().apply { rewind() })
+                        flightPath.transform(toPixels)
+                        drawPath(flightPath, lerp(origin.color, landing.color, p))
+                        val side = diameter * origin.iconScale
+                        translate(at.x - side / 2, at.y - side / 2) {
+                            with(flightIcon) {
+                                draw(Size(side, side), colorFilter = ColorFilter.tint(lerp(origin.iconColor, landing.iconColor, p)))
+                            }
+                        }
+                        return@onDrawWithContent
+                    }
 
                     // The origin's icon (the button's plus, a badge's category), fading out
                     // as the shape opens up.
@@ -776,8 +920,12 @@ private fun EntryContent(
 
         // Categories.
         val categories = Categories.forKind(kind, customCategories)
-        val rowState = rememberLazyListState()
+        // Opens already scrolled to the category, rather than gliding there, so a badge
+        // flying in from the ledger has a still target to land on.
+        val rowState = rememberLazyListState(initialFirstVisibleItemIndex = maxOf(0, categories.indexOf(category) - 1))
         LaunchedEffect(kind) { rowState.animateScrollToItem(maxOf(0, categories.indexOf(category) - 1)) }
+        val landing = LocalCategoryLanding.current
+        if (landing != null && landing.target == null) SideEffect { landing.target = category }
         LazyRow(
             state = rowState,
             contentPadding = PaddingValues(horizontal = 20.dp),
@@ -787,6 +935,7 @@ private fun EntryContent(
                 CategoryChip(
                     category = c,
                     selected = c == category,
+                    landing = landing.takeIf { c == (landing?.target ?: category) },
                     onClick = {
                         haptics.performHapticFeedback(HapticFeedbackType.SegmentFrequentTick)
                         category = c
@@ -851,6 +1000,9 @@ private fun EntryContent(
         Spacer(Modifier.height(16.dp))
 
         val swipe = remember { KindSwipeState() }
+        // The amount before the latest keystroke, so a key press that turns out to be the
+        // start of a swipe can be taken back. Keys type on touch-down; see [Keypad].
+        var beforeLastKey by remember { mutableStateOf<String?>(null) }
         Box(Modifier.padding(horizontal = 20.dp)) {
             KindSwipeHints(swipe, kind, gutter = 20.dp)
             Keypad(
@@ -860,11 +1012,17 @@ private fun EntryContent(
                     if (next == input && key != '<') {
                         haptics.performHapticFeedback(HapticFeedbackType.Reject)
                     }
+                    beforeLastKey = input
                     input = next
                 },
                 onClear = {
                     haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                    beforeLastKey = null
                     input = ""
+                },
+                onUndo = {
+                    beforeLastKey?.let { input = it }
+                    beforeLastKey = null
                 },
                 modifier = Modifier.kindSwipe(swipe, kind, ::selectKind),
             )
@@ -1056,6 +1214,8 @@ internal fun CategoryChip(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     badgeSize: Dp = 56.dp,
+    /** Set on the selected chip of a sheet that a ledger badge flies into. */
+    landing: CategoryLanding? = null,
 ) {
     val spatial = MaterialTheme.motionScheme.defaultSpatialSpec<Float>()
     val progress by animateFloatAsState(if (selected) 1f else 0f, spatial, label = "morph")
@@ -1081,6 +1241,18 @@ internal fun CategoryChip(
         label = "content",
     )
     val interaction = remember { MutableInteractionSource() }
+    // The category's own colours rather than the chip's current ones: a dismissal after
+    // picking another category lands on an unselected (grey) chip, and the badge should
+    // still look like the row's.
+    val badgeColor = categoryContainer(category)
+    val badgeIconColor = onCategoryContainer(category)
+    if (landing != null) SideEffect {
+        landing.category = category
+        landing.color = badgeColor
+        landing.iconColor = badgeIconColor
+        landing.scale = { scale }
+        landing.rotation = { rotation + phase + turn }
+    }
 
     Column(
         modifier
@@ -1097,10 +1269,14 @@ internal fun CategoryChip(
             containerColor = container,
             contentColor = content,
             shapeRotation = { rotation + phase + turn },
-            modifier = Modifier.graphicsLayer {
-                scaleX = scale
-                scaleY = scale
-            },
+            modifier = Modifier
+                // Ahead of the scale, so the landing sees the unscaled size it multiplies up.
+                .then(if (landing != null) Modifier.onGloballyPositioned { landing.coords = it } else Modifier)
+                .graphicsLayer {
+                    scaleX = scale
+                    scaleY = scale
+                    alpha = if (landing?.inFlight?.invoke() == true) 0f else 1f
+                },
         )
         Spacer(Modifier.height(6.dp))
         // Long names ("Subscriptions", "Развлечения") shrink to fit the chip's fixed width
