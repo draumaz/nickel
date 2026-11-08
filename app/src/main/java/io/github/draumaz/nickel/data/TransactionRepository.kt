@@ -49,6 +49,11 @@ class TransactionRepository private constructor(context: Context) {
         )
     }
 
+    /** Rewrites one transaction under the lock; a missing id (already deleted) is a no-op. */
+    suspend fun update(id: Long, transform: (Transaction) -> Transaction) = mutate { ledger ->
+        ledger.copy(transactions = ledger.transactions.map { if (it.id == id) transform(it) else it })
+    }
+
     suspend fun delete(id: Long) = mutate { ledger ->
         ledger.copy(transactions = ledger.transactions.filterNot { it.id == id })
     }

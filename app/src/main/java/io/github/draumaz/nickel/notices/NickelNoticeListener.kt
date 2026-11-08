@@ -16,6 +16,8 @@ import io.github.draumaz.nickel.R
 import io.github.draumaz.nickel.data.Categories
 import io.github.draumaz.nickel.data.Money
 import io.github.draumaz.nickel.data.NoticeParser
+import io.github.draumaz.nickel.data.NoticeTwins
+import io.github.draumaz.nickel.data.RecentCapture
 import io.github.draumaz.nickel.data.SettingsRepository
 import io.github.draumaz.nickel.data.Transaction
 import io.github.draumaz.nickel.data.TransactionRepository
@@ -69,18 +71,40 @@ class NickelNoticeListener : NotificationListenerService() {
         val match = NoticeParser.parse(sbn.packageName, appName, title, text, sbn.notification.channelId) ?: return
         remember(seen + fingerprint)
 
-        scope.launch {
-            val repository = TransactionRepository.get(applicationContext)
-            val transaction = Transaction(
-                id = System.nanoTime(),
+        // Matched and recorded here on the main thread, before any coroutine starts, so two
+        // alerts for one tap arriving back to back can't both slip past as originals.
+        val recent = NoticeTwins.prune(recentCaptures(), sbn.postTime)
+        val twin = NoticeTwins.findTwin(recent, sbn.packageName, match, sbn.postTime)
+        if (twin != null) {
+            if (match.namesMerchant && !twin.namesMerchant) adoptMerchant(twin, match.note, recent)
+            return
+        }
+
+        val note = localized(match.note)
+        val transaction = Transaction(
+            id = System.nanoTime(),
+            amountCents = match.amountCents,
+            kind = match.kind,
+            // Notifications rarely name a category; drop them in "Other" and let
+            // the user reassign when they next open the app.
+            category = Categories.fallback(match.kind),
+            note = note,
+            timestamp = sbn.postTime,
+        )
+        rememberCaptures(
+            recent + RecentCapture(
+                packageName = sbn.packageName,
                 amountCents = match.amountCents,
                 kind = match.kind,
-                // Notifications rarely name a category; drop them in "Other" and let
-                // the user reassign when they next open the app.
-                category = Categories.fallback(match.kind),
-                note = localized(match.note),
-                timestamp = sbn.postTime,
+                postTime = sbn.postTime,
+                transactionId = transaction.id,
+                note = note,
+                namesMerchant = match.namesMerchant,
             )
+        )
+
+        scope.launch {
+            val repository = TransactionRepository.get(applicationContext)
             repository.upsert(transaction)
             runCatching { NickelWidget().updateAll(applicationContext) }
             notifyCaptured(transaction, localized(match.source))
@@ -107,6 +131,30 @@ class NickelNoticeListener : NotificationListenerService() {
     private fun remember(seen: List<String>) {
         getSharedPreferences("notices", Context.MODE_PRIVATE)
             .edit().putString(KEY_SEEN, seen.takeLast(MAX_SEEN).joinToString("\n")).apply()
+    }
+
+    /**
+     * The card app's alert came first and saved a generic note ("Cash App"); Wallet's twin
+     * names the store, which is what the user will want to read later. Swapped only while
+     * the note is still the one we wrote, so an edit made in the meantime is never clobbered.
+     */
+    private fun adoptMerchant(twin: RecentCapture, merchant: String, recent: List<RecentCapture>) {
+        rememberCaptures(recent.map { if (it == twin) it.copy(note = merchant, namesMerchant = true) else it })
+        scope.launch {
+            TransactionRepository.get(applicationContext).update(twin.transactionId) {
+                if (it.note == twin.note) it.copy(note = merchant) else it
+            }
+            runCatching { NickelWidget().updateAll(applicationContext) }
+        }
+    }
+
+    private fun recentCaptures(): List<RecentCapture> = NoticeTwins.decode(
+        getSharedPreferences("notices", Context.MODE_PRIVATE).getString(KEY_RECENT, null)
+    )
+
+    private fun rememberCaptures(recent: List<RecentCapture>) {
+        getSharedPreferences("notices", Context.MODE_PRIVATE)
+            .edit().putString(KEY_RECENT, NoticeTwins.encode(recent)).apply()
     }
 
     private fun labelFor(packageName: String): String? = runCatching {
@@ -181,6 +229,7 @@ class NickelNoticeListener : NotificationListenerService() {
     private companion object {
         const val CHANNEL_ID = "captured"
         const val KEY_SEEN = "seen_fingerprints"
+        const val KEY_RECENT = "recent_captures"
         const val MAX_SEEN = 256
     }
 }

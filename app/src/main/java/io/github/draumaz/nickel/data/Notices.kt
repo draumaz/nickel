@@ -10,6 +10,11 @@ data class NoticeMatch(
     /** Where the notification came from, e.g. "Zelle" or "Text message". */
     val source: String,
     val note: String,
+    /**
+     * Whether [note] is a merchant name (Google Wallet's receipt title) rather than an app's
+     * generic alert title, so a twin alert from the card's own app can borrow it.
+     */
+    val namesMerchant: Boolean = false,
 )
 
 /**
@@ -109,8 +114,9 @@ object NoticeParser {
             expenseRegex.containsMatchIn(part) -> Kind.EXPENSE
             else -> null
         }
+        val walletPurchase = isWalletPurchase(packageName, channel)
         val kind = kindOf(text) ?: kindOf(title)
-            ?: Kind.EXPENSE.takeIf { isWalletPurchase(packageName, channel) }
+            ?: Kind.EXPENSE.takeIf { walletPurchase }
             ?: return null
 
         val source = when {
@@ -123,6 +129,7 @@ object NoticeParser {
             kind = kind,
             source = source,
             note = title?.trim()?.takeIf { it.isNotEmpty() } ?: source,
+            namesMerchant = walletPurchase && !title.isNullOrBlank(),
         )
     }
 
