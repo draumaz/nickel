@@ -26,14 +26,26 @@ object NoticeParser {
     /** Source label for texts; English here, swapped for the translation where it's shown. */
     const val SMS_SOURCE = "Text message"
 
-    // Two shapes only: a symbol- or code-prefixed amount ($1,234.56, USD 25) or a
-    // code-suffixed one (25.00 USD). A bare number is never a transaction.
+    // A number as payment apps print it in any locale: "1,234.56", "1.234,56", "1 234,56"
+    // (Russian and French group with no-break spaces). It must end on a digit so a sentence's
+    // closing period isn't read as a decimal point. Which separator is decimal is settled in
+    // centsOf, not here.
+    private const val NUM = "\\d(?:[\\d,.\u00A0\u202F]*\\d)?"
+    private const val CODE = "(?:USD|EUR|GBP|CAD|AUD|JPY|CHF|INR)"
+    private const val SYMBOL = "[$€£¥₹]"
+    private const val GAP = "[\\s\u00A0\u202F]"
+
+    // Symbol- or code-marked amounts only, on either side of the number: "$1,234.56",
+    // "USD 25", "25.00 USD", and "8,83 $" the way Google Wallet writes it in a European or
+    // Russian locale. A bare number is never a transaction. A trailing symbol must not be
+    // followed by a digit, so "5 $10 coupons" reads as $10 rather than $5.
     private val amount = Regex(
-        "(?:(?:[$€£¥₹]|(?:USD|EUR|GBP|CAD|AUD|JPY|CHF|INR)\\s)\\s?\\d[\\d,]*(?:\\.\\d{1,2})?)" +
-            "|(?:\\d[\\d,]*(?:\\.\\d{1,2})?\\s(?:USD|EUR|GBP|CAD|AUD|JPY|CHF|INR))",
+        "(?:(?:$SYMBOL|$CODE\\s)\\s?$NUM)" +
+            "|(?:$NUM$GAP$CODE)" +
+            "|(?:$NUM$GAP?$SYMBOL(?!\\d))",
         RegexOption.IGNORE_CASE,
     )
-    private val number = Regex("[\\d,]+(?:\\.\\d{1,2})?")
+    private val number = Regex(NUM)
 
     // Checked before the expense list: "sent you" must win over a later bare "sent".
     private val incomeWords = listOf(
@@ -65,10 +77,27 @@ object NoticeParser {
     )
 
     /**
+     * Google Wallet's tap-to-pay receipts ("SAFEWAY #1551" / "$8.83 with Visa ••1234") carry
+     * no direction word in any language, but everything on that channel is a card purchase,
+     * so the channel itself is the direction. Gated on the channel rather than the package
+     * because Wallet also posts offers and pass updates that can mention money.
+     */
+    private const val WALLET_PACKAGE = "com.google.android.apps.walletnfcrel"
+    private const val WALLET_PURCHASE_CHANNEL = "tapandpay.transactions"
+
+    /**
      * @param appName the resolved label of the posting app, or `null` if it couldn't be read.
+     * @param channel the notification's channel id, used to recognize apps whose purchase
+     *   alerts have no direction word.
      * @return the transaction to add, or `null` when the text isn't a clear money event.
      */
-    fun parse(packageName: String, appName: String?, title: String?, text: String?): NoticeMatch? {
+    fun parse(
+        packageName: String,
+        appName: String?,
+        title: String?,
+        text: String?,
+        channel: String? = null,
+    ): NoticeMatch? {
         val combined = listOfNotNull(title, text).filter { it.isNotBlank() }.joinToString(" ")
         if (combined.isBlank()) return null
         val cents = amount.find(combined)?.let { centsOf(it.value) } ?: return null
@@ -80,7 +109,9 @@ object NoticeParser {
             expenseRegex.containsMatchIn(part) -> Kind.EXPENSE
             else -> null
         }
-        val kind = kindOf(text) ?: kindOf(title) ?: return null
+        val kind = kindOf(text) ?: kindOf(title)
+            ?: Kind.EXPENSE.takeIf { isWalletPurchase(packageName, channel) }
+            ?: return null
 
         val source = when {
             smsPackages.any(packageName::startsWith) -> SMS_SOURCE
@@ -95,17 +126,24 @@ object NoticeParser {
         )
     }
 
+    private fun isWalletPurchase(packageName: String, channel: String?) =
+        packageName == WALLET_PACKAGE && channel?.startsWith(WALLET_PURCHASE_CHANNEL) == true
+
     private fun centsOf(matched: String): Long? {
-        // "1,234.5" -> one thousand two hundred thirty-four dollars and fifty cents, the
-        // way payment apps write it; a lone fraction digit is read as tenths of a dollar.
-        val parts = number.find(matched)?.value?.replace(",", "")?.split('.', limit = 2) ?: return null
-        val whole = parts[0].toLongOrNull() ?: return null
-        val fractionCents = when (val fraction = parts.getOrNull(1)) {
-            null, "" -> 0L
-            else -> when (fraction.length) {
-                1 -> fraction.toLong() * 10
-                else -> fraction.take(2).toLong()
-            }
+        val raw = number.find(matched)?.value?.filterNot { it == '\u00A0' || it == '\u202F' }
+            ?: return null
+        // The last separator is the decimal point only when one or two digits follow it:
+        // "8,83" and "1.234,56" are cents, "1,234" is a thousand. A lone fraction digit is
+        // tenths ("$12.5" is twelve fifty), the way payment apps write it.
+        val last = raw.indexOfLast { it == '.' || it == ',' }
+        val fraction = if (last >= 0) raw.substring(last + 1) else ""
+        val decimal = last >= 0 && fraction.length in 1..2
+        val whole = (if (decimal) raw.substring(0, last) else raw).filter(Char::isDigit)
+            .toLongOrNull() ?: return null
+        val fractionCents = when {
+            !decimal -> 0L
+            fraction.length == 1 -> fraction.toLong() * 10
+            else -> fraction.toLong()
         }
         return whole * 100 + fractionCents
     }

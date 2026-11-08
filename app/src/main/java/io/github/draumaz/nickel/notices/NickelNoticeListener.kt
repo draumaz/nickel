@@ -66,7 +66,7 @@ class NickelNoticeListener : NotificationListenerService() {
         if (fingerprint in seen) return
 
         val appName = labelFor(sbn.packageName)
-        val match = NoticeParser.parse(sbn.packageName, appName, title, text) ?: return
+        val match = NoticeParser.parse(sbn.packageName, appName, title, text, sbn.notification.channelId) ?: return
         remember(seen + fingerprint)
 
         scope.launch {

@@ -94,4 +94,72 @@ class NoticeParserTest {
         assertEquals(90000L, match!!.amountCents)
         assertEquals("bank", match.source)
     }
+
+    @Test
+    fun parsesRussianLocaleGoogleWalletPurchase() {
+        // Verbatim from a Pixel set to Russian: suffixed symbol, comma decimal, no direction word.
+        val match = NoticeParser.parse(
+            "com.google.android.apps.walletnfcrel",
+            "Google Кошелёк",
+            "SAFEWAY #1551",
+            "8,83\u00A0$ с карты Venmo",
+            channel = "tapandpay.transactions.low",
+        )
+        assertEquals(883L, match!!.amountCents)
+        assertEquals(Kind.EXPENSE, match.kind)
+        assertEquals("SAFEWAY #1551", match.note)
+    }
+
+    @Test
+    fun parsesEnglishGoogleWalletPurchase() {
+        val match = NoticeParser.parse(
+            "com.google.android.apps.walletnfcrel",
+            "Google Wallet",
+            "Starbucks",
+            "$4.50 with Visa ••1234",
+            channel = "tapandpay.transactions.low",
+        )
+        assertEquals(450L, match!!.amountCents)
+        assertEquals(Kind.EXPENSE, match.kind)
+    }
+
+    @Test
+    fun skipsGoogleWalletAmountsOffThePurchaseChannel() {
+        assertNull(
+            NoticeParser.parse(
+                "com.google.android.apps.walletnfcrel",
+                "Google Wallet",
+                "Offer",
+                "Get $10 back at Target",
+                channel = "offers",
+            )
+        )
+    }
+
+    @Test
+    fun readsSeparatorsByWhatFollowsThem() {
+        fun cents(text: String) = NoticeParser.parse("com.bank", "Bank", null, text)?.amountCents
+        assertEquals(123400L, cents("You received $1,234"))
+        assertEquals(123456L, cents("You received 1.234,56 €"))
+        assertEquals(123456L, cents("You received 1\u00A0234,56\u00A0€"))
+        assertEquals(2500L, cents("You received $25."))
+    }
+
+    @Test
+    fun prefersTheMarkedAmountOverANumberBeforeASymbol() {
+        val match = NoticeParser.parse("com.shop", "Shop", null, "You spent 5 $10 coupons")
+        assertEquals(1000L, match!!.amountCents)
+    }
+
+    @Test
+    fun parsesWealthfrontDebitCardAlert() {
+        val match = NoticeParser.parse(
+            "com.wealthfront",
+            "Wealthfront",
+            "Transaction completed",
+            "$10.00 debit card transaction at Venmo Emma Anderson. Funds were withdrawn from your Individual Cash Account.",
+        )
+        assertEquals(1000L, match!!.amountCents)
+        assertEquals(Kind.EXPENSE, match.kind)
+    }
 }
