@@ -366,16 +366,28 @@ fun EntrySheet(
     // scrim and sheet vanish with nothing left to show.
     // A save slams home instead: it speeds up all the way in, so it still has its speed when
     // it hits and the shape it lands in can take the impact (see [slamLanding]).
-    val slamSpec = remember { tween<Float>(260, easing = CubicBezierEasing(0.45f, 0f, 0.9f, 0.45f)) }
+    val slamSpec = remember { tween<Float>(SlamMillis, easing = CubicBezierEasing(0.45f, 0f, 0.9f, 0.45f)) }
 
-    fun shrink(slam: Boolean = true, then: () -> Unit = {}) {
+    /**
+     * @param velocity growth per second to start from. A released pull passes the finger's
+     *   own speed, so the shape carries straight on instead of stalling while a spring from
+     *   rest gathers itself, which read as a hitch right after letting go.
+     */
+    fun shrink(slam: Boolean = true, velocity: Float = 0f, then: () -> Unit = {}) {
         if (origin == null || motion.shrinking) return
         motion.shrinking = true
         scope.launch {
             // A settling spring spends its last stretch creeping through sub-pixel changes;
             // waiting that out reads as a pause before the button wakes, so hand over as soon
             // as the scallop has visibly arrived.
-            launch { motion.grow.animateTo(0f, if (slam) slamSpec else shrinkSpec) }
+            launch {
+                val spec = when {
+                    !slam -> shrinkSpec
+                    velocity < 0f -> slamFrom(motion.grow.value, -velocity)
+                    else -> slamSpec
+                }
+                motion.grow.animateTo(0f, spec, initialVelocity = velocity)
+            }
             snapshotFlow { motion.grow.value }.first { it <= HandoverAt }
             motion.grow.snapTo(0f)
             motion.handedOver = true
@@ -410,7 +422,7 @@ fun EntrySheet(
     }
 
     fun close(slam: Boolean = true, then: () -> Unit) {
-        if (origin != null) return shrink(slam, then)
+        if (origin != null) return shrink(slam, then = then)
         scope.launch { sheetState.hide() }.invokeOnCompletion {
             then()
             onDismiss()
@@ -493,9 +505,20 @@ fun EntrySheet(
                             scope.launch { motion.grow.snapTo(progress) }
                         }
                     },
-                    onRelease = { velocity ->
-                        if (motion.grow.value < PullDismissAt || velocity > flingVelocity) shrink()
-                        else if (!motion.shrinking) scope.launch { motion.grow.animateTo(1f, settleSpec) }
+                    onRelease = { velocity, growVelocity ->
+                        // A flick decides on its own, whichever side of the line the pull got
+                        // to: one that ends heading back up is the user changing their mind,
+                        // and closing anyway made the shape stop, turn round and then shrink.
+                        val close = when {
+                            velocity > flingVelocity -> true
+                            velocity < -flingVelocity -> false
+                            else -> motion.grow.value < PullDismissAt
+                        }
+                        if (close) {
+                            shrink(velocity = growVelocity.coerceAtMost(0f))
+                        } else if (!motion.shrinking) {
+                            scope.launch { motion.grow.animateTo(1f, settleSpec, initialVelocity = growVelocity) }
+                        }
                     },
                     onDismissAction = { shrink() },
                 ) {
@@ -545,6 +568,31 @@ private class ScallopMotion(private val morphing: Boolean) {
     }
 }
 
+/**
+ * The slam home for a released pull: the same speed-up-into-the-hit curve as a save's, but
+ * starting at the finger's speed rather than from rest. A tween can't take an initial
+ * velocity, so the speed goes into the curve's opening slope instead; the stock slam starts
+ * flat, and right after a quick pull that read as the shape stopping before it went.
+ *
+ * @param from growth left to cover.
+ * @param speed the finger's speed in growth per second, toward the button.
+ */
+private fun slamFrom(from: Float, speed: Float): FiniteAnimationSpec<Float> {
+    val millis = (SlamMillis * from).toInt().coerceAtLeast(SlamMinMillis)
+    // The curve's opening slope, in units of the average speed over the whole trip. The first
+    // control point sits early so a fast finger can be matched without the curve doubling back.
+    val slope = if (from > 0f) speed * millis / 1000f / from else 0f
+    val x1 = 0.2f
+    val y1 = (slope * x1).coerceIn(0f, 0.45f)
+    return tween(millis, easing = CubicBezierEasing(x1, y1, 0.9f, 0.45f))
+}
+
+/** How long a full-size slam home takes; shorter trips take proportionally less. */
+private const val SlamMillis = 260
+
+/** The shortest slam, so a nearly closed pull still visibly lands rather than blinking. */
+private const val SlamMinMillis = 120
+
 /** Below this much growth a released pull carries on into the button instead of springing back. */
 private const val PullDismissAt = 0.6f
 
@@ -578,8 +626,11 @@ private fun ScallopFrame(
     landing: CategoryLanding?,
     /** Called with the growth a downward pull has wound the shape back to. */
     onPull: (Float) -> Unit,
-    /** Called with the downward fling velocity, in px/s, when the pull ends. */
-    onRelease: (Float) -> Unit,
+    /**
+     * Called when the pull ends with the downward fling velocity in px/s, and the same speed
+     * as growth per second (negative while closing), for the animation to carry on from.
+     */
+    onRelease: (velocity: Float, growVelocity: Float) -> Unit,
     onDismissAction: () -> Unit,
     content: @Composable () -> Unit,
 ) {
@@ -633,8 +684,11 @@ private fun ScallopFrame(
                         val reach = originTop - top
                         travel = if (reach > sheetHeight * 0.3f) reach else sheetHeight * 0.8f
                     },
-                    onDragEnd = { currentOnRelease(velocity.calculateVelocity().y) },
-                    onDragCancel = { currentOnRelease(0f) },
+                    onDragEnd = {
+                        val y = velocity.calculateVelocity().y
+                        currentOnRelease(y, -y / travel)
+                    },
+                    onDragCancel = { currentOnRelease(0f, 0f) },
                 ) { change, dragAmount ->
                     change.consume()
                     velocity.addPointerInputChange(change)
