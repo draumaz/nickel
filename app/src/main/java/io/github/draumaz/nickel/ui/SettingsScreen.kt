@@ -27,6 +27,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -53,7 +55,6 @@ import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Upload
-import androidx.compose.material3.BasicAlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilledTonalIconButton
@@ -100,6 +101,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withLink
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.Lifecycle
@@ -537,46 +539,76 @@ private fun TransferDialogs(
 ) {
     if (state == TransferState.Idle) return
     val busy = state == TransferState.Reading || state == TransferState.Importing
-    BasicAlertDialog(
+    // A full-screen window with the card centered inside it, rather than a window that wraps
+    // the card. A wrapping window resizes and re-centers on every frame of the card's size
+    // morph, a frame or so behind the content, so the text rode upward and jittered for the
+    // whole animation. With the window fixed, the card grows around text that holds still.
+    Dialog(
         onDismissRequest = { if (!busy) onDismiss() },
-        properties = DialogProperties(dismissOnClickOutside = !busy, dismissOnBackPress = !busy),
+        properties = DialogProperties(
+            dismissOnClickOutside = false,
+            dismissOnBackPress = !busy,
+            usePlatformDefaultWidth = false,
+        ),
     ) {
         val spatial = MaterialTheme.motionScheme.defaultSpatialSpec<IntSize>()
         val effects = MaterialTheme.motionScheme.defaultEffectsSpec<Float>()
-        Surface(
-            shape = RoundedCornerShape(28.dp),
-            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        // The window now covers the whole screen, so "outside the card" is this backdrop.
+        Box(
+            Modifier
+                .fillMaxSize()
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    enabled = !busy,
+                    onClick = onDismiss,
+                ),
+            contentAlignment = Alignment.Center,
         ) {
-            AnimatedContent(
-                targetState = state,
-                contentKey = { it::class },
-                transitionSpec = {
-                    (fadeIn(effects) + scaleIn(initialScale = 0.92f))
-                        .togetherWith(fadeOut(effects))
-                        .using(SizeTransform(clip = true) { _, _ -> spatial })
-                },
-                contentAlignment = Alignment.Center,
-                label = "transfer",
-            ) { s ->
-                when (s) {
-                    TransferState.Reading -> BusyContent(stringResource(R.string.import_reading))
-                    TransferState.Importing -> BusyContent(stringResource(R.string.import_busy))
-                    is TransferState.Failed -> MessageContent(stringResource(R.string.import_failed), stringResource(s.message), onDismiss)
-                    is TransferState.Preview -> if (s.plan.transactions.isEmpty()) {
-                        MessageContent(
-                            stringResource(R.string.already_imported),
-                            pluralStringResource(
-                                R.plurals.already_imported_body,
-                                s.plan.duplicates,
-                                s.plan.duplicates,
-                                s.fileName ?: stringResource(R.string.this_file),
-                            ),
-                            onDismiss,
-                        )
-                    } else {
-                        PreviewContent(s.plan, s.fileName, onConfirm, onDismiss)
+            Surface(
+                shape = RoundedCornerShape(28.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                modifier = Modifier
+                    .padding(horizontal = 40.dp)
+                    .widthIn(min = 280.dp, max = 560.dp)
+                    // Swallow taps on the card itself so they don't reach the backdrop.
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = {},
+                    ),
+            ) {
+                AnimatedContent(
+                    targetState = state,
+                    contentKey = { it::class },
+                    transitionSpec = {
+                        (fadeIn(effects) + scaleIn(initialScale = 0.92f))
+                            .togetherWith(fadeOut(effects))
+                            .using(SizeTransform(clip = true) { _, _ -> spatial })
+                    },
+                    contentAlignment = Alignment.Center,
+                    label = "transfer",
+                ) { s ->
+                    when (s) {
+                        TransferState.Reading -> BusyContent(stringResource(R.string.import_reading))
+                        TransferState.Importing -> BusyContent(stringResource(R.string.import_busy))
+                        is TransferState.Failed -> MessageContent(stringResource(R.string.import_failed), stringResource(s.message), onDismiss)
+                        is TransferState.Preview -> if (s.plan.transactions.isEmpty()) {
+                            MessageContent(
+                                stringResource(R.string.already_imported),
+                                pluralStringResource(
+                                    R.plurals.already_imported_body,
+                                    s.plan.duplicates,
+                                    s.plan.duplicates,
+                                    s.fileName ?: stringResource(R.string.this_file),
+                                ),
+                                onDismiss,
+                            )
+                        } else {
+                            PreviewContent(s.plan, s.fileName, onConfirm, onDismiss)
+                        }
+                        TransferState.Idle -> Unit
                     }
-                    TransferState.Idle -> Unit
                 }
             }
         }
