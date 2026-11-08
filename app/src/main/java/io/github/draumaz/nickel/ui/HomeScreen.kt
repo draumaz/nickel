@@ -528,8 +528,12 @@ private fun SettingsButton(onClick: () -> Unit) {
         MaterialTheme.motionScheme.defaultSpatialSpec(),
         label = "gear",
     )
+    val haptics = LocalHapticFeedback.current
     FilledTonalIconButton(
-        onClick = onClick,
+        onClick = {
+            haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
+            onClick()
+        },
         shapes = IconButtonDefaults.shapes(),
         interactionSource = interaction,
         modifier = Modifier.size(48.dp),
