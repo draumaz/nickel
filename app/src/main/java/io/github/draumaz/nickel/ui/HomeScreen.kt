@@ -148,10 +148,19 @@ import java.time.LocalTime
 import java.time.ZoneId
 import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
+import androidx.compose.ui.geometry.isSpecified
+import androidx.compose.runtime.withFrameNanos
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-fun HomeScreen(viewModel: NickelViewModel, onOpenSettings: () -> Unit) {
+fun HomeScreen(
+    viewModel: NickelViewModel,
+    onOpenSettings: () -> Unit,
+    addEntryPending: Boolean = false,
+    onAddEntryHandled: () -> Unit = {},
+) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val refreshing by viewModel.refreshing.collectAsStateWithLifecycle()
     val haptics = LocalHapticFeedback.current
@@ -190,6 +199,17 @@ fun HomeScreen(viewModel: NickelViewModel, onOpenSettings: () -> Unit) {
                 lastOffset = offset
             }
     }
+    // Hidden only while actually moving through the list: once the user stops (a fling
+    // counts as moving until it settles) and lingers, the add button comes back.
+    LaunchedEffect(listState) {
+        snapshotFlow { listState.isScrollInProgress || fabShownByScroll }
+            .collectLatest { busyOrShown ->
+                if (!busyOrShown) {
+                    delay(FAB_LINGER_MS)
+                    fabShownByScroll = true
+                }
+            }
+    }
 
     var sheetKind by remember { mutableStateOf<Kind?>(null) }
     var editing by remember { mutableStateOf<Transaction?>(null) }
@@ -200,6 +220,30 @@ fun HomeScreen(viewModel: NickelViewModel, onOpenSettings: () -> Unit) {
     val fabOrigin = remember { ScallopOrigin() }
     /** Shared by all rows: the tapped one fills it in, and only it reports while open. */
     val rowOrigin = remember { ScallopOrigin() }
+
+    // New entries start as expenses; the sheet's switch flips to income.
+    fun openNewEntry() {
+        Haptics.fabToggle(context, opening = true)
+        editing = null
+        cloning = null
+        morphOrigin = fabOrigin
+        sheetKind = Kind.EXPENSE
+    }
+
+    // A widget tap: the same as pressing the scallop, once there's a scallop to press. The
+    // button is only measured a frame or two after loading finishes, and the sheet grows out
+    // of wherever it was measured, so wait for that rather than morphing from nowhere. An
+    // entry already open is left alone instead of being thrown away for a blank one.
+    LaunchedEffect(addEntryPending, state.loading) {
+        if (!addEntryPending || state.loading) return@LaunchedEffect
+        fabShownByScroll = true
+        if (sheetKind == null) {
+            repeat(10) { if (!fabOrigin.centerOnScreen.isSpecified) withFrameNanos { } }
+            openNewEntry()
+            if (!fabOrigin.centerOnScreen.isSpecified) morphOrigin = null
+        }
+        onAddEntryHandled()
+    }
 
     fun deleteWithUndo(t: Transaction) {
         viewModel.delete(t)
@@ -223,17 +267,10 @@ fun HomeScreen(viewModel: NickelViewModel, onOpenSettings: () -> Unit) {
         floatingActionButtonPosition = FabPosition.Center,
         floatingActionButton = {
             val fabVisible by remember { derivedStateOf { !state.loading && fabShownByScroll } }
-            // New entries start as expenses; the sheet's switch flips to income.
             ScallopFab(
                 origin = fabOrigin,
                 enabled = fabVisible && sheetKind == null,
-                onClick = {
-                    Haptics.fabToggle(context, opening = true)
-                    editing = null
-                    cloning = null
-                    morphOrigin = fabOrigin
-                    sheetKind = Kind.EXPENSE
-                },
+                onClick = ::openNewEntry,
                 modifier = Modifier
                     .semantics { traversalIndex = -1f }
                     .animateFloatingActionButton(
@@ -370,6 +407,9 @@ fun HomeScreen(viewModel: NickelViewModel, onOpenSettings: () -> Unit) {
         )
     }
 }
+
+/** How long the list must sit still before a scrolled-away add button comes back. */
+private const val FAB_LINGER_MS = 2_000L
 
 /** The category icon's size relative to its badge, as [CategoryBadge] draws it. */
 private const val BadgeIconScale = 0.46f

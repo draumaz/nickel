@@ -1,5 +1,6 @@
 package io.github.draumaz.nickel
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -31,6 +32,7 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -56,9 +58,18 @@ private val BackSettle = spring<Float>(
 )
 
 class MainActivity : ComponentActivity() {
+
+    /**
+     * Set by a widget tap and cleared once Home has opened the entry sheet. Only read from a
+     * fresh launch, not a recreation: the launching intent survives rotation and process
+     * death, and replaying it would pop the sheet open again on every turn of the phone.
+     */
+    private var addEntryPending by mutableStateOf(false)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+        if (savedInstanceState == null) addEntryPending = intent?.action == ACTION_ADD_ENTRY
         setContent {
             val viewModel: NickelViewModel = viewModel()
             val settings by viewModel.settings.collectAsStateWithLifecycle()
@@ -81,12 +92,16 @@ class MainActivity : ComponentActivity() {
                 val effects = MaterialTheme.motionScheme.defaultEffectsSpec<Float>()
 
                 fun go(to: Screen) {
+                    if (to == saved) return
                     saved = to
                     scope.launch {
                         // Going back runs the linear back transition, so ease it with the spring.
                         if (to == Screen.HOME) nav.animateTo(to, BackSettle) else nav.animateTo(to)
                     }
                 }
+
+                // A widget tap while Settings is up goes back Home first; Home opens the sheet.
+                LaunchedEffect(addEntryPending) { if (addEntryPending) go(Screen.HOME) }
 
                 // Keyed off `saved`, not the transition: scrubbing retargets the transition to Home,
                 // which would otherwise switch the handler off mid-gesture.
@@ -139,6 +154,8 @@ class MainActivity : ComponentActivity() {
                             Screen.HOME -> HomeScreen(
                                 viewModel = viewModel,
                                 onOpenSettings = { go(Screen.SETTINGS) },
+                                addEntryPending = addEntryPending,
+                                onAddEntryHandled = { addEntryPending = false },
                             )
                             Screen.SETTINGS -> SettingsScreen(
                                 viewModel = viewModel,
@@ -149,5 +166,14 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        if (intent.action == ACTION_ADD_ENTRY) addEntryPending = true
+    }
+
+    companion object {
+        const val ACTION_ADD_ENTRY = "io.github.draumaz.nickel.action.ADD_ENTRY"
     }
 }

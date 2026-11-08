@@ -4,6 +4,7 @@ import io.github.draumaz.nickel.ui.components.localizedDateFormat
 import io.github.draumaz.nickel.ui.components.displayLabel
 import io.github.draumaz.nickel.R
 import android.content.Context
+import android.content.Intent
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
@@ -13,7 +14,7 @@ import androidx.glance.GlanceModifier
 import androidx.glance.GlanceTheme
 import androidx.glance.LocalContext
 import androidx.glance.LocalSize
-import androidx.glance.action.actionStartActivity
+import androidx.glance.appwidget.action.actionStartActivity
 import androidx.glance.action.clickable
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.SizeMode
@@ -100,7 +101,7 @@ private fun WidgetContent(netCents: Long, recent: List<Transaction>) {
             .background(GlanceTheme.colors.widgetBackground)
             .cornerRadius(24.dp)
             .padding(horizontal = if (compact) 12.dp else 16.dp, vertical = 14.dp)
-            .clickable(actionStartActivity<MainActivity>()),
+            .clickable(actionStartActivity(addEntryIntent(LocalContext.current))),
     ) {
         Text(
             LocalContext.current.getString(R.string.widget_net),
@@ -161,7 +162,7 @@ private fun NetOnly(netCents: Long) {
             .background(GlanceTheme.colors.widgetBackground)
             .cornerRadius(24.dp)
             .padding(horizontal = horizontalPadding.dp, vertical = 10.dp)
-            .clickable(actionStartActivity<MainActivity>()),
+            .clickable(actionStartActivity(addEntryIntent(LocalContext.current))),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -215,3 +216,14 @@ private fun TransactionRow(transaction: Transaction, showDate: Boolean) {
         )
     }
 }
+
+/**
+ * A widget tap means "I just spent something": it opens straight into a new entry, as if the
+ * + scallop had been pressed. SINGLE_TOP with CLEAR_TOP hands the request to an already
+ * running app through onNewIntent; without them Android just brings the old task forward
+ * and the request is lost.
+ */
+private fun addEntryIntent(context: Context) =
+    Intent(context, MainActivity::class.java)
+        .setAction(MainActivity.ACTION_ADD_ENTRY)
+        .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
