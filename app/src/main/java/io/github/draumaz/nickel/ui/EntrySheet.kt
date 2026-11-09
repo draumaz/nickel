@@ -1,5 +1,9 @@
 package io.github.draumaz.nickel.ui
 
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.window.DialogWindowProvider
+import android.view.WindowManager
+import android.view.View
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.text.TextAutoSize
 import io.github.draumaz.nickel.ui.components.localizedDateFormat
@@ -325,6 +329,11 @@ fun EntrySheet(
     customCategories: List<Category>,
     onCreateCategory: (Category) -> Unit,
     onDismiss: () -> Unit,
+    /**
+     * The sheet has committed to closing and stopped taking touches, though its exit still
+     * has to play out before [onDismiss].
+     */
+    onClosing: () -> Unit = {},
     /** Earlier notes' categories, which a matching note picks automatically. */
     noteMemory: NoteMemory = NoteMemory.Empty,
     /** Prefills a *new* entry (amount, kind, category, note) from it, timestamped now. */
@@ -337,6 +346,7 @@ fun EntrySheet(
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val currentOnDismiss by rememberUpdatedState(onDismiss)
+    val currentOnClosing by rememberUpdatedState(onClosing)
     val motion = remember { ScallopMotion(morphing = origin != null) }
     val landing = remember {
         if (origin?.fliesToCategory == true) {
@@ -376,6 +386,8 @@ fun EntrySheet(
     fun shrink(slam: Boolean = true, velocity: Float = 0f, then: () -> Unit = {}) {
         if (origin == null || motion.shrinking) return
         motion.shrinking = true
+        motion.letTouchesThrough()
+        currentOnClosing()
         scope.launch {
             // A settling spring spends its last stretch creeping through sub-pixel changes;
             // waiting that out reads as a pause before the button wakes, so hand over as soon
@@ -423,6 +435,8 @@ fun EntrySheet(
 
     fun close(slam: Boolean = true, then: () -> Unit) {
         if (origin != null) return shrink(slam, then = then)
+        motion.letTouchesThrough()
+        currentOnClosing()
         scope.launch { sheetState.hide() }.invokeOnCompletion {
             then()
             onDismiss()
@@ -430,6 +444,8 @@ fun EntrySheet(
     }
 
     val content: @Composable ColumnScope.() -> Unit = {
+        val sheetView = LocalView.current
+        SideEffect { motion.sheetView = sheetView }
         CompositionLocalProvider(LocalCategoryLanding provides landing) {
         EntryContent(
             initialKind = initialKind,
@@ -560,6 +576,21 @@ private class ScallopMotion(private val morphing: Boolean) {
      */
     var handedOver by mutableStateOf(false)
     var onShrinkRequest: () -> Unit = {}
+
+    /** The sheet window's root view, to reach its window once dismissal begins. */
+    var sheetView: View? = null
+
+    /**
+     * Once the sheet is on its way out, its window stops taking touches, so they fall
+     * through to Home. Otherwise the full-screen window swallows every touch until the
+     * shrink, the slam's settle and the window teardown have all finished, and a scroll
+     * started right after dismissing does nothing for a good fraction of a second. Nothing
+     * on the sheet needs input by then: every path out has already committed.
+     */
+    fun letTouchesThrough() {
+        val window = (sheetView?.parent as? DialogWindowProvider)?.window ?: return
+        window.addFlags(WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE)
+    }
 
     fun confirm(value: SheetValue): Boolean {
         if (!morphing || value != SheetValue.Hidden) return true

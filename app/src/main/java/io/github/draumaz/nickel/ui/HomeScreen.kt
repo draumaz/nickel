@@ -1,5 +1,7 @@
 package io.github.draumaz.nickel.ui
 
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.key
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.platform.LocalLayoutDirection
 import kotlin.math.abs
@@ -212,6 +214,21 @@ fun HomeScreen(
     }
 
     var sheetKind by remember { mutableStateOf<Kind?>(null) }
+    /**
+     * The open sheet is on its way out. Its window already lets touches through, so the list
+     * scrolls straight away; a tap that would open a sheet waits in [pendingOpen] until the
+     * old one is gone, rather than rewriting the state it is still closing with.
+     */
+    var sheetClosing by remember { mutableStateOf(false) }
+    var pendingOpen by remember { mutableStateOf<(() -> Unit)?>(null) }
+    /** Bumped per sheet, so a queued open gets a fresh sheet instead of the closing one's state. */
+    var sheetSession by remember { mutableIntStateOf(0) }
+    fun openSheet(open: () -> Unit) {
+        when {
+            sheetKind == null -> { sheetSession++; open() }
+            sheetClosing -> pendingOpen = open
+        }
+    }
     var editing by remember { mutableStateOf<Transaction?>(null) }
     /** The transaction a swipe-right is cloning into a new entry, if any. */
     var cloning by remember { mutableStateOf<Transaction?>(null) }
@@ -222,7 +239,7 @@ fun HomeScreen(
     val rowOrigin = remember { ScallopOrigin() }
 
     // New entries start as expenses; the sheet's switch flips to income.
-    fun openNewEntry() {
+    fun openNewEntry() = openSheet {
         Haptics.fabToggle(context, opening = true)
         editing = null
         cloning = null
@@ -290,7 +307,7 @@ fun HomeScreen(
             val fabVisible by remember { derivedStateOf { !state.loading && fabShownByScroll } }
             ScallopFab(
                 origin = fabOrigin,
-                enabled = fabVisible && sheetKind == null,
+                enabled = fabVisible && (sheetKind == null || sheetClosing),
                 onClick = ::openNewEntry,
                 modifier = Modifier
                     .semantics { traversalIndex = -1f }
@@ -381,10 +398,12 @@ fun HomeScreen(
                         rowOrigin = rowOrigin,
                         originId = (editing ?: cloning)?.id.takeIf { morphOrigin === rowOrigin },
                         onClick = {
-                            editing = it
-                            cloning = null
-                            morphOrigin = rowOrigin
-                            sheetKind = it.kind
+                            openSheet {
+                                editing = it
+                                cloning = null
+                                morphOrigin = rowOrigin
+                                sheetKind = it.kind
+                            }
                         },
                         onDelete = {
                             haptics.performHapticFeedback(HapticFeedbackType.Confirm)
@@ -392,10 +411,12 @@ fun HomeScreen(
                         },
                         onClone = {
                             haptics.performHapticFeedback(HapticFeedbackType.Confirm)
-                            editing = null
-                            cloning = it
-                            morphOrigin = rowOrigin
-                            sheetKind = it.kind
+                            openSheet {
+                                editing = null
+                                cloning = it
+                                morphOrigin = rowOrigin
+                                sheetKind = it.kind
+                            }
                         },
                     )
                 }
@@ -405,6 +426,7 @@ fun HomeScreen(
 
     sheetKind?.let { kind ->
         val noteMemory by viewModel.noteMemory.collectAsStateWithLifecycle()
+        key(sheetSession) {
         EntrySheet(
             initialKind = kind,
             editing = editing,
@@ -413,11 +435,17 @@ fun HomeScreen(
             customCategories = state.customCategories,
             noteMemory = noteMemory,
             onCreateCategory = viewModel::addCategory,
+            onClosing = { sheetClosing = true },
             onDismiss = {
                 sheetKind = null
                 editing = null
                 cloning = null
                 morphOrigin = null
+                sheetClosing = false
+                pendingOpen?.let { open ->
+                    pendingOpen = null
+                    openSheet(open)
+                }
             },
             onSave = { t ->
                 val isNew = editing == null
@@ -426,6 +454,7 @@ fun HomeScreen(
             },
             onDelete = { deleteWithUndo(it) },
         )
+        }
     }
 }
 
