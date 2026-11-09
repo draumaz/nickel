@@ -30,6 +30,7 @@ No DI framework, no Room, no navigation library. Data flows one way through `Sta
   - `Csv.kt` — a hand-written RFC 4180 parser plus `LedgerCsv.plan()` (import planning) and `LedgerCsv.export()`. `plan()` is pure and takes the existing ledger as arguments, which is what makes it unit-testable on the JVM.
   - `Money.kt` — a global singleton (`Money.chosenCurrency` is Compose snapshot state) applied by `SettingsRepository`'s `init`, so app and widget format identically.
   - `SettingsRepository.kt` — SharedPreferences: dynamic color and currency code.
+- **`backup/`** — automatic CSV backups to a user-picked folder through a persisted Storage Access Framework tree grant (no storage permission). `LedgerBackup` writes one `nickel-backup-YYYY-MM-DD.csv` per day, keeps the newest 7 and never writes an empty ledger. `BackupWorker` is the periodic WorkManager job. Naming and pruning rules live in `data/Backups.kt` so they're unit-testable. The first-run prompt is on Home, and the folder and interval rows are in Settings → Your data.
 - **`widget/`** — a Glance home-screen widget that reads the ledger files directly. The ViewModel re-publishes it (`NickelWidget().updateAll`) on every ledger change after first load and on currency changes; the widget itself constructs a `SettingsRepository` on `provideGlance` to apply the currency.
 
 ## Data model gotchas

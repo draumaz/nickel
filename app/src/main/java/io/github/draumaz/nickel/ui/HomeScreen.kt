@@ -245,6 +245,27 @@ fun HomeScreen(
         onAddEntryHandled()
     }
 
+    // Snackbars from the ViewModel, such as the first backup's result after the prompt below.
+    LaunchedEffect(Unit) {
+        viewModel.messages.collect {
+            snackbar.currentSnackbarData?.dismiss()
+            snackbar.showSnackbar(it)
+        }
+    }
+
+    // First-run backup question. Held back while an entry sheet is open (a widget launch
+    // opens one straight away) so it never lands on top of someone mid-entry.
+    val backup by viewModel.backup.collectAsStateWithLifecycle()
+    val pickBackupFolder = rememberBackupFolderPicker { uri ->
+        if (uri != null) viewModel.chooseBackupFolder(uri) else viewModel.declineBackup()
+    }
+    if (!state.loading && !backup.prompted && backup.folderUri == null && sheetKind == null && !addEntryPending) {
+        BackupPrompt(
+            onChooseFolder = pickBackupFolder,
+            onDecline = viewModel::declineBackup,
+        )
+    }
+
     fun deleteWithUndo(t: Transaction) {
         viewModel.delete(t)
         scope.launch {

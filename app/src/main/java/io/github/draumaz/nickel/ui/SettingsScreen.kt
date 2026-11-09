@@ -51,7 +51,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.CurrencyExchange
+import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Download
+import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Upload
@@ -130,6 +132,14 @@ fun SettingsScreen(viewModel: NickelViewModel, onBack: () -> Unit) {
     val haptics = LocalHapticFeedback.current
     val snackbar = remember { SnackbarHostState() }
     var showCurrency by rememberSaveable { mutableStateOf(false) }
+    val backup by viewModel.backup.collectAsStateWithLifecycle()
+    var showBackupInterval by rememberSaveable { mutableStateOf(false) }
+    val pickBackupFolder = rememberBackupFolderPicker { uri ->
+        uri?.let {
+            haptics.performHapticFeedback(HapticFeedbackType.Confirm)
+            viewModel.chooseBackupFolder(it)
+        }
+    }
 
     LaunchedEffect(Unit) {
         viewModel.messages.collect {
@@ -225,7 +235,7 @@ fun SettingsScreen(viewModel: NickelViewModel, onBack: () -> Unit) {
                 iconShape = MaterialShapes.Clover4Leaf,
                 title = stringResource(R.string.import_csv),
                 subtitle = stringResource(R.string.import_csv_subtitle),
-                shape = segmentShape(0, 2),
+                shape = segmentShape(0, 4),
                 onClick = {
                     importLauncher.launch(
                         arrayOf("text/*", "application/csv", "application/vnd.ms-excel", "application/octet-stream")
@@ -238,10 +248,34 @@ fun SettingsScreen(viewModel: NickelViewModel, onBack: () -> Unit) {
                 title = stringResource(R.string.export_csv),
                 subtitle = if (state.count == 0) stringResource(R.string.export_nothing)
                 else pluralStringResource(R.plurals.export_subtitle, state.count, state.count),
-                shape = segmentShape(1, 2),
+                shape = segmentShape(1, 4),
                 enabled = state.count > 0,
                 onClick = viewModel::export,
             )
+            SettingRow(
+                icon = Icons.Rounded.Folder,
+                iconShape = MaterialShapes.Cookie4Sided,
+                title = stringResource(R.string.backup_folder),
+                subtitle = backup.folderName ?: stringResource(R.string.backup_folder_unset),
+                shape = segmentShape(2, 4),
+                onClick = pickBackupFolder,
+            )
+            SettingRow(
+                icon = Icons.Rounded.History,
+                iconShape = MaterialShapes.Flower,
+                title = stringResource(R.string.auto_backup),
+                subtitle = when {
+                    backup.folderUri == null -> stringResource(R.string.auto_backup_needs_folder)
+                    backup.intervalHours <= 0 -> stringResource(R.string.auto_backup_off)
+                    else -> stringResource(R.string.dot_pair, intervalLabel(backup.intervalHours), lastBackupLabel(backup))
+                },
+                shape = segmentShape(3, 4),
+                enabled = backup.folderUri != null,
+                onClick = { showBackupInterval = true },
+            )
+            if (showBackupInterval) {
+                BackupIntervalDialog(viewModel, backup, onDismiss = { showBackupInterval = false })
+            }
 
             Footer()
         }

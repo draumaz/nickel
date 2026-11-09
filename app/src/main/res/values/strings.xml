@@ -93,6 +93,31 @@
         <item quantity="one">Share or save your %d transaction as a CSV file</item>
         <item quantity="other">Share or save all %d transactions as a CSV file</item>
     </plurals>
+    <string name="backup_folder">Backup folder</string>
+    <string name="backup_folder_unset">Choose a folder for automatic backups</string>
+    <string name="auto_backup">Automatic backups</string>
+    <string name="auto_backup_off">Off</string>
+    <string name="auto_backup_needs_folder">Choose a backup folder first</string>
+    <string name="backup_daily">Every day</string>
+    <plurals name="backup_every_days">
+        <item quantity="one">Every %d day</item>
+        <item quantity="other">Every %d days</item>
+    </plurals>
+    <!-- %1$s is a relative time, e.g. "5 minutes ago". -->
+    <string name="backup_last">last saved %1$s</string>
+    <string name="backup_never">no backup yet</string>
+    <string name="backup_last_failed">last backup failed: choose the folder again</string>
+    <string name="backup_interval_body">Saves your ledger as a CSV in the backup folder. The newest %1$d backups are kept; older ones are removed.</string>
+    <string name="backup_now">Back up now</string>
+    <!-- %1$s is the folder name. -->
+    <string name="backup_saved">Backed up to %1$s</string>
+    <string name="backup_nothing">Nothing to back up yet</string>
+    <string name="backup_failed">Couldn\'t write the backup. Try choosing the folder again.</string>
+    <string name="backup_folder_failed">Couldn\'t get access to that folder</string>
+    <string name="backup_prompt_title">Keep a backup?</string>
+    <string name="backup_prompt_body">Nickel can save a copy of your ledger as a CSV file to a folder you choose, once a day. It never leaves your phone unless that folder syncs somewhere. You can change this later in Settings.</string>
+    <string name="backup_choose_folder">Choose folder</string>
+    <string name="not_now">Not now</string>
     <!-- "Nickel, 1.0" on the first line, "by draumaz" on the second; %1$s is the author link. -->
     <string name="about_version">, 1.0</string>
     <string name="about_by">by %1$s</string>

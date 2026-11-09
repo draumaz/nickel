@@ -93,6 +93,31 @@
         <item quantity="many">Отправить или сохранить %d операций в CSV-файл</item>
         <item quantity="other">Отправить или сохранить %d операции в CSV-файл</item>
     </plurals>
+    <string name="backup_folder">Папка для копий</string>
+    <string name="backup_folder_unset">Выберите папку для автоматических копий</string>
+    <string name="auto_backup">Автоматические копии</string>
+    <string name="auto_backup_off">Выключено</string>
+    <string name="auto_backup_needs_folder">Сначала выберите папку для копий</string>
+    <string name="backup_daily">Каждый день</string>
+    <plurals name="backup_every_days">
+        <item quantity="one">Раз в %d день</item>
+        <item quantity="few">Раз в %d дня</item>
+        <item quantity="many">Раз в %d дней</item>
+        <item quantity="other">Раз в %d дня</item>
+    </plurals>
+    <string name="backup_last">сохранено %1$s</string>
+    <string name="backup_never">копий пока нет</string>
+    <string name="backup_last_failed">последняя копия не удалась: выберите папку заново</string>
+    <string name="backup_interval_body">Сохраняет ваши операции в CSV-файл в папке для копий. Хранятся последние %1$d копий, более старые удаляются.</string>
+    <string name="backup_now">Сохранить сейчас</string>
+    <string name="backup_saved">Копия сохранена в %1$s</string>
+    <string name="backup_nothing">Пока нечего сохранять</string>
+    <string name="backup_failed">Не удалось сохранить копию. Попробуйте выбрать папку заново.</string>
+    <string name="backup_folder_failed">Не удалось получить доступ к этой папке</string>
+    <string name="backup_prompt_title">Сохранять резервные копии?</string>
+    <string name="backup_prompt_body">Nickel может раз в день сохранять копию ваших операций в CSV-файл в выбранную вами папку. Данные не покидают телефон, если папка ни с чем не синхронизируется. Это можно изменить позже в настройках.</string>
+    <string name="backup_choose_folder">Выбрать папку</string>
+    <string name="not_now">Не сейчас</string>
     <string name="about_version">, 1.0</string>
     <string name="about_by">автор: %1$s</string>
     <string name="currency_dialog_body">Меняет только символ, с которым показываются суммы. Суммы не пересчитываются.</string>

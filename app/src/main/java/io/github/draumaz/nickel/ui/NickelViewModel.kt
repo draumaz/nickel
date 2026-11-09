@@ -8,6 +8,8 @@ import androidx.glance.appwidget.updateAll
 import io.github.draumaz.nickel.R
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import io.github.draumaz.nickel.backup.LedgerBackup
+import io.github.draumaz.nickel.data.BackupSettings
 import io.github.draumaz.nickel.data.Categories
 import io.github.draumaz.nickel.data.Category
 import io.github.draumaz.nickel.data.ImportException
@@ -97,6 +99,11 @@ class NickelViewModel(app: Application) : AndroidViewModel(app) {
 
     val settings: StateFlow<Settings> = settingsRepository.settings
     val dynamicColorSupported: Boolean = settingsRepository.dynamicColorSupported
+    val backup: StateFlow<BackupSettings> = settingsRepository.backup
+
+    private val _backingUp = MutableStateFlow(false)
+    /** A manual backup is being written. */
+    val backingUp: StateFlow<Boolean> = _backingUp.asStateFlow()
 
     private val _transfer = MutableStateFlow<TransferState>(TransferState.Idle)
     val transfer: StateFlow<TransferState> = _transfer.asStateFlow()
@@ -199,6 +206,56 @@ class NickelViewModel(app: Application) : AndroidViewModel(app) {
     fun setCurrency(code: String?) {
         settingsRepository.setCurrency(code)
         viewModelScope.launch { runCatching { NickelWidget().updateAll(getApplication()) } }
+    }
+
+    /**
+     * Takes the folder the picker returned, then backs up straight away so the user sees
+     * a file land there. Turns the schedule on at 24 hours if it was off, since picking a
+     * folder is the whole of the opt-in.
+     */
+    fun chooseBackupFolder(tree: Uri) {
+        val app = getApplication<Application>()
+        viewModelScope.launch {
+            val name = withContext(Dispatchers.IO) {
+                runCatching { LedgerBackup.persistAccess(app, tree, backup.value.folderUri) }
+                    .onFailure {
+                        _messages.send(app.getString(R.string.backup_folder_failed))
+                        return@withContext null
+                    }
+                LedgerBackup.folderName(app, tree) ?: tree.lastPathSegment
+            } ?: return@launch
+            val interval = backup.value.intervalHours.takeIf { it > 0 } ?: DEFAULT_BACKUP_HOURS
+            settingsRepository.setBackupFolder(tree.toString(), name, interval)
+            LedgerBackup.schedule(app, settingsRepository)
+            backupNow()
+        }
+    }
+
+    fun setBackupInterval(hours: Int) {
+        settingsRepository.setBackupInterval(hours)
+        LedgerBackup.schedule(getApplication(), settingsRepository)
+    }
+
+    /** The first-run question was turned down; settings can still set a folder later. */
+    fun declineBackup() = settingsRepository.setBackupPrompted()
+
+    fun backupNow() {
+        if (_backingUp.value) return
+        val app = getApplication<Application>()
+        viewModelScope.launch {
+            _backingUp.value = true
+            val minimumShow = async { delay(500) }
+            val outcome = LedgerBackup.run(app, settingsRepository)
+            minimumShow.await()
+            _backingUp.value = false
+            _messages.send(
+                when (outcome) {
+                    LedgerBackup.Outcome.SAVED -> app.getString(R.string.backup_saved, backup.value.folderName.orEmpty())
+                    LedgerBackup.Outcome.EMPTY -> app.getString(R.string.backup_nothing)
+                    LedgerBackup.Outcome.NO_FOLDER, LedgerBackup.Outcome.FAILED -> app.getString(R.string.backup_failed)
+                }
+            )
+        }
     }
 
     fun refresh() {
@@ -307,6 +364,10 @@ class NickelViewModel(app: Application) : AndroidViewModel(app) {
             }
             if (file != null) _shareExports.send(file) else _messages.send(getApplication<Application>().getString(R.string.export_failed))
         }
+    }
+
+    private companion object {
+        const val DEFAULT_BACKUP_HOURS = 24
     }
 
     private fun displayName(uri: Uri): String? = runCatching {
