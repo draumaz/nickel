@@ -119,7 +119,7 @@
     <string name="backup_choose_folder">Choose folder</string>
     <string name="not_now">Not now</string>
     <!-- "Nickel, 1.0" on the first line, "by draumaz" on the second; %1$s is the author link. -->
-    <string name="about_version">, 1.0</string>
+    <string name="about_version">, 1.0.1</string>
     <string name="about_by">by %1$s</string>
     <string name="currency_dialog_body">Changes the symbol amounts are shown with. Amounts aren’t converted.</string>
     <string name="search">Search</string>
