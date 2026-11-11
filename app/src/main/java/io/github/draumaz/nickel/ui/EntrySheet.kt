@@ -444,6 +444,18 @@ fun EntrySheet(
             }
             DisposableEffect(Unit) { onDispose { currentOnFrost(0f) } }
         }
+    } else if (GlassSupported) {
+        // A plain sheet frosts Home too, so every entry sheet is the same glass. It follows the
+        // sheet's show/hide target with the effects spec, as the sheet's own scrim fades, so
+        // the blur and the dim come and go together.
+        val currentOnFrost by rememberUpdatedState(onFrost)
+        val frost by animateFloatAsState(
+            if (sheetState.targetValue != SheetValue.Hidden) 1f else 0f,
+            MaterialTheme.motionScheme.defaultEffectsSpec(),
+            label = "frost",
+        )
+        LaunchedEffect(Unit) { snapshotFlow { frost }.collect { currentOnFrost(it) } }
+        DisposableEffect(Unit) { onDispose { currentOnFrost(0f) } }
     }
 
     fun close(slam: Boolean = true, then: () -> Unit) {
@@ -481,7 +493,10 @@ fun EntrySheet(
         ModalBottomSheet(
             onDismissRequest = onDismiss,
             sheetState = sheetState,
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+            // The same glass panel as a morphing sheet's (see ScallopFrame).
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow.let {
+                if (GlassSupported) it.copy(alpha = SheetGlassTint) else it
+            },
             content = content,
         )
         return
@@ -685,7 +700,13 @@ private fun ScallopFrame(
     onDismissAction: () -> Unit,
     content: @Composable () -> Unit,
 ) {
-    val surface = MaterialTheme.colorScheme.surfaceContainerLow
+    // Frosted glass, like the button it grows from: Home is blurred behind a morphing sheet, so
+    // a translucent panel lets its colours glow through without anything legible showing.
+    // The shape already starts as the button's glass tint, so the whole morph stays one piece
+    // of glass rather than turning solid as it opens.
+    val surface = MaterialTheme.colorScheme.surfaceContainerLow.let {
+        if (GlassSupported) it.copy(alpha = SheetGlassTint) else it
+    }
     val icon = rememberVectorPainter(origin.icon)
     val flightIcon = rememberVectorPainter(landing?.category?.icon ?: origin.icon)
     val flightPath = remember { Path() }
@@ -876,6 +897,12 @@ private const val NoteGuessDelayMillis = 300L
 
 private val DialChipWidth = 76.dp
 private val DialGap = 4.dp
+
+/**
+ * How much surfaceContainerLow the glass entry sheet keeps. Heavier than other glass: the
+ * keypad and fields sit on it, so it has to stay calm, with Home only a glow behind.
+ */
+private const val SheetGlassTint = 0.8f
 
 /** Matches [BottomSheetDefaults.ExpandedShape]'s top corners. */
 private val SheetCorner = 28.dp

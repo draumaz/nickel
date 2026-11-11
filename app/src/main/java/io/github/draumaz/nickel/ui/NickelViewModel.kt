@@ -94,9 +94,6 @@ class NickelViewModel(app: Application) : AndroidViewModel(app) {
     private val filter = MutableStateFlow(Filter.ALL)
     private val categoryFilter = MutableStateFlow<String?>(null)
 
-    private val _refreshing = MutableStateFlow(false)
-    val refreshing: StateFlow<Boolean> = _refreshing.asStateFlow()
-
     val settings: StateFlow<Settings> = settingsRepository.settings
     val dynamicColorSupported: Boolean = settingsRepository.dynamicColorSupported
     val backup: StateFlow<BackupSettings> = settingsRepository.backup
@@ -258,22 +255,11 @@ class NickelViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun refresh() {
-        viewModelScope.launch {
-            _refreshing.value = true
-            repository.load()
-            // Let the loading indicator finish a morph or two so the refresh reads as intentional.
-            delay(700)
-            _refreshing.value = false
-        }
-    }
-
     /**
      * Quiet re-read of the ledger on every return to the foreground: the notification
      * listener writes to the same files while the app sits in the background, and without
-     * this the captured transactions only show after a restart or a manual refresh. Unlike
-     * [refresh] there's no spinner, and an unchanged ledger never re-emits, so the widget
-     * isn't told to redraw either.
+     * this the captured transactions only show after a restart. An unchanged ledger never
+     * re-emits, so the widget isn't told to redraw either.
      */
     fun syncLedger() {
         viewModelScope.launch { repository.load() }

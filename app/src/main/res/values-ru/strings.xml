@@ -8,7 +8,6 @@
     <string name="cancel">Отмена</string>
     <string name="done">Готово</string>
     <string name="delete">Удалить</string>
-    <string name="undo">Отменить</string>
     <string name="back">Назад</string>
     <string name="settings">Настройки</string>
     <string name="today">Сегодня</string>
@@ -23,7 +22,6 @@
     <string name="greeting_afternoon">Добрый день</string>
     <string name="greeting_evening">Добрый вечер</string>
     <string name="add_transaction">Добавить операцию</string>
-    <string name="deleted_item">Удалено: %1$s</string>
     <string name="duplicate">Дублировать</string>
     <string name="empty_ledger_title">Здесь пока пусто</string>
     <string name="empty_ledger_body">Нажмите +, чтобы записать первый расход или доход.</string>

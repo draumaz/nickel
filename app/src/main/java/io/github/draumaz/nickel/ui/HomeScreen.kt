@@ -7,7 +7,6 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import kotlin.math.abs
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.material3.SwipeToDismissBoxState
-import androidx.compose.ui.platform.LocalResources
 import io.github.draumaz.nickel.ui.components.GlassSupported
 import io.github.draumaz.nickel.ui.components.GlassDefaults
 import io.github.draumaz.nickel.ui.components.GlassIconButton
@@ -40,6 +39,10 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.ui.graphics.TileMode
 import androidx.compose.ui.graphics.BlurEffect
 import androidx.compose.runtime.mutableFloatStateOf
@@ -83,10 +86,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialShapes
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Surface
 import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.SwipeToDismissBoxValue
@@ -94,9 +95,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.ToggleButton
 import androidx.compose.material3.ToggleButtonDefaults
 import androidx.compose.material3.animateFloatingActionButton
-import androidx.compose.material3.pulltorefresh.PullToRefreshBox
-import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
-import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -166,10 +164,8 @@ fun HomeScreen(
     onAddEntryHandled: () -> Unit = {},
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    val refreshing by viewModel.refreshing.collectAsStateWithLifecycle()
     val haptics = LocalHapticFeedback.current
     val context = LocalContext.current
-    val resources = LocalResources.current
     val scope = rememberCoroutineScope()
     val snackbar = remember { SnackbarHostState() }
     val listState = rememberLazyListState()
@@ -250,22 +246,6 @@ fun HomeScreen(
         )
     }
 
-    fun deleteWithUndo(t: Transaction) {
-        viewModel.delete(t)
-        scope.launch {
-            snackbar.currentSnackbarData?.dismiss()
-            val result = snackbar.showSnackbar(
-                message = resources.getString(R.string.deleted_item, t.note.ifBlank { t.category.displayLabel(resources) }),
-                actionLabel = resources.getString(R.string.undo),
-                withDismissAction = false,
-                duration = SnackbarDuration.Long,
-            )
-            // Restore under a fresh id: reusing the old key would revive the row's
-            // lingering composition, still in its swiped-away state.
-            if (result == SnackbarResult.ActionPerformed) viewModel.save(t.copy(id = System.nanoTime()))
-        }
-    }
-
     /**
      * How frosted Home is behind a morphing entry sheet, 0 to 1, so the scallop stays glass
      * like the button it grew from. Home blurs itself rather than the sheet's window blurring
@@ -305,104 +285,84 @@ fun HomeScreen(
             return@Scaffold
         }
 
-        val pullState = rememberPullToRefreshState()
-        PullToRefreshBox(
-            isRefreshing = refreshing,
-            onRefresh = {
-                haptics.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
-                viewModel.refresh()
-            },
-            state = pullState,
-            // Edge to edge, like the bottom: the list scrolls up under the status bar rather than
-            // being cut off at its edge, so only the content and the indicator take the inset.
+        // Edge to edge, like the bottom: the list scrolls up under the status bar rather than
+        // being cut off at its edge, so only its content takes the inset.
+        LazyColumn(
+            state = listState,
             modifier = Modifier.fillMaxSize(),
-            indicator = {
-                PullToRefreshDefaults.LoadingIndicator(
-                    state = pullState,
-                    isRefreshing = refreshing,
-                    modifier = Modifier
-                        .align(Alignment.TopCenter)
-                        .padding(top = padding.calculateTopPadding()),
-                )
-            },
+            contentPadding = PaddingValues(
+                start = 16.dp,
+                end = 16.dp,
+                top = padding.calculateTopPadding(),
+                bottom = padding.calculateBottomPadding() + FabSize + 44.dp,
+            ),
         ) {
-            LazyColumn(
-                state = listState,
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(
-                    start = 16.dp,
-                    end = 16.dp,
-                    top = padding.calculateTopPadding(),
-                    bottom = padding.calculateBottomPadding() + FabSize + 44.dp,
-                ),
-            ) {
-                item(key = "header", contentType = "header") { Header(onOpenSettings) }
-                item(key = "hero", contentType = "hero") {
-                    HeroCard(state.totals, state.summary)
-                }
-                item(key = "filter", contentType = "filter") {
-                    Column {
-                        FilterRow(
-                            selected = state.filter,
-                            onSelect = {
-                                haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
-                                viewModel.setFilter(it)
-                            },
-                        )
-                        CategoryFilterCarousel(
-                            categories = state.filterCategories,
-                            selected = state.categoryFilter,
-                            onSelect = {
-                                haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
-                                viewModel.setCategoryFilter(it)
-                            },
-                        )
-                    }
-                }
-
-                when {
-                    state.isEmpty -> item(key = "empty", contentType = "empty") {
-                        EmptyState(
-                            title = stringResource(R.string.empty_ledger_title),
-                            body = stringResource(R.string.empty_ledger_body),
-                            modifier = Modifier.animateItem(),
-                        )
-                    }
-                    state.transactions.isEmpty() -> item(key = "none", contentType = "empty") {
-                        EmptyState(
-                            title = stringResource(if (state.filter == Filter.INCOME) R.string.no_income_yet else R.string.no_expenses_yet),
-                            body = stringResource(R.string.empty_filter_body),
-                            modifier = Modifier.animateItem(),
-                        )
-                    }
-                    else -> transactionList(
-                        transactions = state.transactions,
-                        badgeTurn = badgeTurn,
-                        rowOrigin = rowOrigin,
-                        originId = (editing ?: cloning)?.id.takeIf { morphOrigin === rowOrigin },
-                        onClick = {
-                            openSheet {
-                                editing = it
-                                cloning = null
-                                morphOrigin = rowOrigin
-                                sheetKind = it.kind
-                            }
+            item(key = "header", contentType = "header") { Header(onOpenSettings) }
+            item(key = "hero", contentType = "hero") {
+                HeroCard(state.totals, state.summary)
+            }
+            item(key = "filter", contentType = "filter") {
+                Column {
+                    FilterRow(
+                        selected = state.filter,
+                        onSelect = {
+                            haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+                            viewModel.setFilter(it)
                         },
-                        onDelete = {
-                            haptics.performHapticFeedback(HapticFeedbackType.Confirm)
-                            deleteWithUndo(it)
-                        },
-                        onClone = {
-                            haptics.performHapticFeedback(HapticFeedbackType.Confirm)
-                            openSheet {
-                                editing = null
-                                cloning = it
-                                morphOrigin = rowOrigin
-                                sheetKind = it.kind
-                            }
+                    )
+                    CategoryFilterCarousel(
+                        categories = state.filterCategories,
+                        selected = state.categoryFilter,
+                        onSelect = {
+                            haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+                            viewModel.setCategoryFilter(it)
                         },
                     )
                 }
+            }
+
+            when {
+                state.isEmpty -> item(key = "empty", contentType = "empty") {
+                    EmptyState(
+                        title = stringResource(R.string.empty_ledger_title),
+                        body = stringResource(R.string.empty_ledger_body),
+                        modifier = Modifier.animateItem(),
+                    )
+                }
+                state.transactions.isEmpty() -> item(key = "none", contentType = "empty") {
+                    EmptyState(
+                        title = stringResource(if (state.filter == Filter.INCOME) R.string.no_income_yet else R.string.no_expenses_yet),
+                        body = stringResource(R.string.empty_filter_body),
+                        modifier = Modifier.animateItem(),
+                    )
+                }
+                else -> transactionList(
+                    transactions = state.transactions,
+                    badgeTurn = badgeTurn,
+                    rowOrigin = rowOrigin,
+                    originId = (editing ?: cloning)?.id.takeIf { morphOrigin === rowOrigin },
+                    onClick = {
+                        openSheet {
+                            editing = it
+                            cloning = null
+                            morphOrigin = rowOrigin
+                            sheetKind = it.kind
+                        }
+                    },
+                    onDelete = {
+                        haptics.performHapticFeedback(HapticFeedbackType.Confirm)
+                        viewModel.delete(it)
+                    },
+                    onClone = {
+                        haptics.performHapticFeedback(HapticFeedbackType.Confirm)
+                        openSheet {
+                            editing = null
+                            cloning = it
+                            morphOrigin = rowOrigin
+                            sheetKind = it.kind
+                        }
+                    },
+                )
             }
         }
     }
@@ -436,7 +396,7 @@ fun HomeScreen(
                 viewModel.save(t)
                 if (isNew) scope.launch { listState.animateScrollToItem(0) }
             },
-            onDelete = { deleteWithUndo(it) },
+            onDelete = { viewModel.delete(it) },
         )
         }
     }
@@ -447,6 +407,12 @@ fun HomeScreen(
  * The list's bottom padding follows it so the last row can always scroll clear.
  */
 private val FabSize = 80.dp
+
+/**
+ * How much primaryContainer the add button's glass keeps. Stronger than the header buttons'
+ * glass: it's the screen's main action, so its scallop should hold its own over the list.
+ */
+private const val FabGlassTint = 0.5f
 
 /** The plus as a fraction of [FabSize]; matches [ScallopOrigin.iconScale] so the morph hands over seamlessly. */
 private const val FabIconScale = 0.44f
@@ -533,7 +499,7 @@ private fun ScallopFab(
     val content = MaterialTheme.colorScheme.onPrimaryContainer
     // The sheet grows out of whatever the button actually looks like, so on QPR2 that's the
     // glass tint; the sheet's window frosts the list behind it to match (see frostBehind).
-    val glassTint = MaterialTheme.colorScheme.primaryContainer.copy(alpha = GlassDefaults.ControlTintAlpha)
+    val glassTint = MaterialTheme.colorScheme.primaryContainer.copy(alpha = FabGlassTint)
     SideEffect {
         origin.color = if (GlassSupported) glassTint else container
         origin.iconColor = content
@@ -626,6 +592,9 @@ private fun SettingsButton(onClick: () -> Unit) {
     }
 }
 
+/** How much primaryContainer the header coin's glass keeps (see [CoinMark]). */
+private const val CoinGlassTint = 0.55f
+
 /** The app's little scalloped coin, gently turning. */
 @Composable
 private fun CoinMark() {
@@ -640,14 +609,25 @@ private fun CoinMark() {
             Modifier
                 .fillMaxSize()
                 .graphicsLayer { rotationZ = rotation }
-                .background(MaterialTheme.colorScheme.primary, MaterialShapes.Cookie12Sided.toShape())
+                // Glass like the header's buttons, tinted more strongly: nothing ever scrolls
+                // behind the header, so the tint alone has to draw the scallop's edge. Before
+                // QPR2 it stays the solid primary coin, with the icon to match.
+                .glass(
+                    shape = MaterialShapes.Cookie12Sided.toShape(),
+                    tint = MaterialTheme.colorScheme.primaryContainer.copy(alpha = CoinGlassTint),
+                    fallback = MaterialTheme.colorScheme.primary,
+                )
         )
         // Monticello, as on the back of a US nickel.
         Icon(
             painterResource(R.drawable.ic_monticello),
             contentDescription = null,
-            tint = MaterialTheme.colorScheme.onPrimary,
-            modifier = Modifier.size(26.dp),
+            tint = if (GlassSupported) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onPrimary,
+            // Raised a touch: the dome is thin, so the building's weight sits low and a
+            // mathematically centred icon reads as sagging inside the coin.
+            modifier = Modifier
+                .size(26.dp)
+                .offset(y = (-1.5).dp),
         )
     }
 }
@@ -786,6 +766,9 @@ private fun HeroCard(totals: Totals, summary: FilterSummary?) {
     }
 }
 
+/** How much of its own colour a stat pill's glass keeps (see [StatPill]). */
+private const val StatPillTint = 0.85f
+
 @Composable
 private fun StatPill(
     icon: ImageVector,
@@ -795,10 +778,16 @@ private fun StatPill(
     content: Color,
     modifier: Modifier = Modifier,
 ) {
+    // Glass in the pill's own tone: the hero's decorative shapes drift behind it, blurred, so
+    // the card reads as layered. Tinted heavier than other glass, since the pills' green and
+    // red carry meaning: much below this, red over a green card muddies to brown.
     Row(
         modifier
-            .clip(RoundedCornerShape(50))
-            .background(container)
+            .glass(
+                shape = RoundedCornerShape(50),
+                tint = container.copy(alpha = StatPillTint),
+                fallback = container,
+            )
             .padding(start = 8.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -1018,25 +1007,47 @@ private fun TransactionRow(
         }
     }
 
+    /** Whether a finger is on this row; a clone waits for it to lift (see below). */
+    var fingerDown by remember { mutableStateOf(false) }
+
     // Cloning keeps the row, so there's no need to wait for it to finish sliding offscreen
     // (the box only reports a dismissal once settled, a long invisible tail): as soon as a
-    // release commits to it, open the sheet and spring the row back into place. targetValue
-    // only flips once the finger lifts.
+    // release commits to it, open the sheet and spring the row back into place.
+    // targetValue alone isn't a release: it flips as soon as a drag passes the threshold,
+    // finger still down. Acting on that cloned a row the user was dragging back to cancel,
+    // and springing the row back mid-drag fought the finger for it, which could leave the
+    // row ignoring taps until the app restarted. So it waits for the lift as well.
     // (currentValue is no use as a guard: it tracks the nearest anchor, so it already reads
     // dismissed once the drag passes halfway.)
     LaunchedEffect(dismissState) {
-        snapshotFlow { dismissState.targetValue }.collect {
-            if (it == SwipeToDismissBoxValue.StartToEnd) {
-                currentClaim()
-                currentOnClone()
-                dismissState.reset()
+        snapshotFlow { dismissState.targetValue == SwipeToDismissBoxValue.StartToEnd && !fingerDown }
+            .collect { released ->
+                if (released) {
+                    currentClaim()
+                    currentOnClone()
+                    dismissState.reset()
+                }
             }
-        }
     }
 
     SwipeToDismissBox(
         state = dismissState,
-        modifier = modifier.clip(shape),
+        modifier = modifier
+            .clip(shape)
+            // Watches the finger without consuming anything, so the swipe and taps work as before.
+            .pointerInput(Unit) {
+                awaitEachGesture {
+                    awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                    fingerDown = true
+                    try {
+                        do {
+                            val event = awaitPointerEvent(PointerEventPass.Initial)
+                        } while (event.changes.any { it.pressed })
+                    } finally {
+                        fingerDown = false
+                    }
+                }
+            },
         onDismiss = onSwiped,
         backgroundContent = {
             val cloning = dismissState.dismissDirection == SwipeToDismissBoxValue.StartToEnd
