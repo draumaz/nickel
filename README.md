@@ -5,6 +5,12 @@ A cozy little expense tracker for Android, built with Jetpack Compose and
 Log what comes in and what goes out, sort it into categories, and keep an eye on
 the running total — with plenty of springy, shape-shifting motion along the way.
 
+<p align="center">
+  <img src="docs/screenshots/home.png" width="260" alt="Home screen: net total card, income and expense filters, and today's transactions grouped by day">
+  <img src="docs/screenshots/entry.png" width="260" alt="Entry sheet over a frosted home screen: expense amount, category picker, note, date and number pad">
+  <img src="docs/screenshots/settings.png" width="260" alt="Settings: dynamic color, currency, notification auto-add, and CSV import and export">
+</p>
+
 ## Features
 
 - **Running total at a glance.** The net total sits at the top of the home screen
@@ -26,6 +32,12 @@ the running total — with plenty of springy, shape-shifting motion along the wa
   out at any time. See [CSV format](#csv-format).
 - **Expressive by design.** Spring-based motion, shape morphing, connected button
   groups, a predictive back gesture, loading indicators, and custom haptics.
+- **Frosted glass.** On Android 17 QPR2, the add button and header buttons are
+  lightly tinted glass that blurs whatever scrolls beneath them, and the entry
+  sheet frosts the screen behind it as it grows out of the button. Earlier
+  Android 17 builds get the same controls as solid tonal surfaces.
+
+  <img src="docs/screenshots/glass.png" width="540" alt="Close-up of the glass add button blurring a transaction row scrolling underneath it">
 
 ## Privacy
 
@@ -70,11 +82,11 @@ work as long as they have a **date** and an **amount** column:
 
 Requirements:
 
-- Android SDK with platform 37 (set `sdk.dir` in `local.properties`, or
-  `ANDROID_HOME`)
+- Android SDK with platform 37.2 (Android 17 QPR2; set `sdk.dir` in
+  `local.properties`, or `ANDROID_HOME`)
 - A JDK supported by Gradle 9.8 (the wrapper handles Gradle itself)
-- A device or emulator running Android 10 (API 29) or newer; dynamic color needs
-  Android 12+
+- A device or emulator running Android 17 (API 37) or newer; frosted glass
+  needs QPR2 (API 37.2)
 
 ```sh
 ./gradlew installDebug      # build and install on a connected device
@@ -99,14 +111,14 @@ app/src/main/java/io/github/draumaz/nickel/
     ├── SettingsScreen.kt      # settings, import/export flow
     ├── NickelViewModel.kt     # app state
     ├── Haptics.kt             # composed vibration effects
-    ├── components/            # shared composables (header, badges, rolling text)
+    ├── components/            # shared composables (header, badges, rolling text, glass)
     └── theme/                 # color schemes and theme
 ```
 
 ## Tech
 
 Kotlin · Jetpack Compose · Material 3 (1.5 beta, Expressive APIs) ·
-Android Gradle Plugin 9 · min SDK 29, target SDK 37
+Android Gradle Plugin 9 · min SDK 37, target SDK 37, compile SDK 37.2
 
 ## License
 

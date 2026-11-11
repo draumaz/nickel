@@ -1,5 +1,6 @@
 package io.github.draumaz.nickel.ui
 
+import io.github.draumaz.nickel.ui.components.GlassIconButton
 import io.github.draumaz.nickel.ui.components.localizedDateFormat
 import io.github.draumaz.nickel.ui.components.displayLabel
 import androidx.compose.ui.res.pluralStringResource
@@ -59,9 +60,7 @@ import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Upload
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialShapes
 import androidx.compose.material3.MaterialTheme
@@ -173,11 +172,7 @@ fun SettingsScreen(viewModel: NickelViewModel, onBack: () -> Unit) {
                 title = stringResource(R.string.settings),
                 subtitle = stringResource(R.string.settings_subtitle),
                 leading = {
-                    FilledTonalIconButton(
-                        onClick = onBack,
-                        shapes = IconButtonDefaults.shapes(),
-                        modifier = Modifier.size(44.dp),
-                    ) {
+                    GlassIconButton(onClick = onBack, size = 44.dp) {
                         Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = stringResource(R.string.back))
                     }
                 },

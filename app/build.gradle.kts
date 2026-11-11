@@ -6,11 +6,13 @@ plugins {
 
 android {
     namespace = "io.github.draumaz.nickel"
-    compileSdk = 37
+    compileSdk {
+        version = release(37) { minorApiLevel = 2 }
+    }
 
     defaultConfig {
         applicationId = "xyz.draumaz.nickel"
-        minSdk = 29
+        minSdk = 37
         targetSdk = 37
         versionCode = 2
         versionName = "1.0.1"
