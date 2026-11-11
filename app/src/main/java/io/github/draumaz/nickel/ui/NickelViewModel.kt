@@ -4,7 +4,6 @@ import android.app.Application
 import android.net.Uri
 import android.provider.OpenableColumns
 import androidx.annotation.StringRes
-import androidx.glance.appwidget.updateAll
 import io.github.draumaz.nickel.R
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -22,7 +21,7 @@ import io.github.draumaz.nickel.data.SettingsRepository
 import io.github.draumaz.nickel.data.Transaction
 import io.github.draumaz.nickel.data.TransactionRepository
 import io.github.draumaz.nickel.export.ExportShare
-import io.github.draumaz.nickel.widget.NickelWidget
+import io.github.draumaz.nickel.widget.updateNickelWidgets
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.channels.Channel
@@ -164,7 +163,7 @@ class NickelViewModel(app: Application) : AndroidViewModel(app) {
         // Redraw home-screen widgets whenever the ledger changes after the first load.
         viewModelScope.launch {
             repository.ledger.filterNotNull().drop(1).collect {
-                runCatching { NickelWidget().updateAll(getApplication()) }
+                updateNickelWidgets(getApplication())
             }
         }
     }
@@ -201,7 +200,7 @@ class NickelViewModel(app: Application) : AndroidViewModel(app) {
 
     fun setCurrency(code: String?) {
         settingsRepository.setCurrency(code)
-        viewModelScope.launch { runCatching { NickelWidget().updateAll(getApplication()) } }
+        viewModelScope.launch { updateNickelWidgets(getApplication()) }
     }
 
     /**

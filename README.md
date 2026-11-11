@@ -16,7 +16,7 @@ A cozy little expense tracker for Android, built with Jetpack Compose and
 - Swipe a transaction right to duplicate it, left to delete it
 - Frosted glass on Android 17 QPR2, with springy, shape-morphing motion throughout
 - Dynamic color, or Nickel's own sage-green theme
-- CSV import and export, automatic backups to a folder you pick, and a home-screen widget
+- CSV import and export, automatic backups to a folder you pick, and home-screen widgets (overall balance and today)
 
 <p align="center">
   <img src="docs/screenshots/glass.png" width="540" alt="Close-up of the glass add button blurring a transaction row scrolling underneath it">

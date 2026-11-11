@@ -5,9 +5,8 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import androidx.core.app.NotificationManagerCompat
-import androidx.glance.appwidget.updateAll
 import io.github.draumaz.nickel.data.TransactionRepository
-import io.github.draumaz.nickel.widget.NickelWidget
+import io.github.draumaz.nickel.widget.updateNickelWidgets
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -28,7 +27,7 @@ class NoticeUndoReceiver : BroadcastReceiver() {
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
             try {
                 TransactionRepository.get(context).delete(transactionId)
-                runCatching { NickelWidget().updateAll(context) }
+                updateNickelWidgets(context)
             } finally {
                 NotificationManagerCompat.from(context).cancel(notificationId)
                 result.finish()

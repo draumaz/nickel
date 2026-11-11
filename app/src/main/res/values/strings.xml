@@ -3,6 +3,8 @@
     <string name="notice_listener_name">Nickel transaction capture</string>
     <string name="widget_name">Balance</string>
     <string name="widget_description">Your net total and latest transactions</string>
+    <string name="widget_today_name">Today</string>
+    <string name="widget_today_description">Today\'s net total and latest transactions</string>
 
     <!-- Shared -->
     <string name="ok">OK</string>
@@ -168,6 +170,8 @@
     <!-- Widget -->
     <string name="widget_net">Net</string>
     <string name="widget_empty">No transactions yet</string>
+    <string name="widget_today">Today</string>
+    <string name="widget_today_empty">Nothing logged today</string>
 
     <!-- Notification capture -->
     <string name="channel_captured">Captured transactions</string>

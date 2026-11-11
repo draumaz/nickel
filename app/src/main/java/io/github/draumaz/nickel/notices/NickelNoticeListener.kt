@@ -10,7 +10,6 @@ import android.content.pm.PackageManager
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import androidx.core.app.NotificationCompat
-import androidx.glance.appwidget.updateAll
 import io.github.draumaz.nickel.R
 import io.github.draumaz.nickel.data.Categories
 import io.github.draumaz.nickel.data.Money
@@ -20,7 +19,7 @@ import io.github.draumaz.nickel.data.RecentCapture
 import io.github.draumaz.nickel.data.SettingsRepository
 import io.github.draumaz.nickel.data.Transaction
 import io.github.draumaz.nickel.data.TransactionRepository
-import io.github.draumaz.nickel.widget.NickelWidget
+import io.github.draumaz.nickel.widget.updateNickelWidgets
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -105,7 +104,7 @@ class NickelNoticeListener : NotificationListenerService() {
         scope.launch {
             val repository = TransactionRepository.get(applicationContext)
             repository.upsert(transaction)
-            runCatching { NickelWidget().updateAll(applicationContext) }
+            updateNickelWidgets(applicationContext)
             notifyCaptured(transaction, localized(match.source))
         }
     }
@@ -143,7 +142,7 @@ class NickelNoticeListener : NotificationListenerService() {
             TransactionRepository.get(applicationContext).update(twin.transactionId) {
                 if (it.note == twin.note) it.copy(note = merchant) else it
             }
-            runCatching { NickelWidget().updateAll(applicationContext) }
+            updateNickelWidgets(applicationContext)
         }
     }
 

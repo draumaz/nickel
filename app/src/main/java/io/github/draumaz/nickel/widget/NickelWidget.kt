@@ -62,7 +62,13 @@ class NickelWidget : GlanceAppWidget() {
 
         provideContent {
             GlanceTheme {
-                WidgetContent(net, recent)
+                WidgetContent(
+                    label = context.getString(R.string.widget_net),
+                    emptyText = context.getString(R.string.widget_empty),
+                    netCents = net,
+                    recent = recent,
+                    stamp = WidgetStamp.DATE,
+                )
             }
         }
     }
@@ -72,8 +78,11 @@ class NickelWidget : GlanceAppWidget() {
     }
 }
 
+/** What the small column beside each row shows: the day it happened, or (for Today) the time. */
+internal enum class WidgetStamp(val skeleton: String) { DATE("MMMd"), TIME("jm") }
+
 // The app's income green, without the dynamic-color harmonizing Glance can't do.
-private val IncomeColor = ColorProvider(day = Color(0xFF1B7A45), night = Color(0xFF8FDCA8))
+internal val IncomeColor = ColorProvider(day = Color(0xFF1B7A45), night = Color(0xFF8FDCA8))
 
 private const val HEADER_HEIGHT_DP = 72
 private const val ROW_HEIGHT_DP = 30
@@ -81,8 +90,18 @@ private const val ROW_HEIGHT_DP = 30
 /** Below this width the date is dropped and padding tightens, leaving room for names. */
 private val CompactWidth = 200.dp
 
+/**
+ * The layout both widgets share: a labelled net total over as many recent rows as fit. Balance
+ * and Today differ only in which transactions they're handed and what they call the total.
+ */
 @Composable
-private fun WidgetContent(netCents: Long, recent: List<Transaction>) {
+internal fun WidgetContent(
+    label: String,
+    emptyText: String,
+    netCents: Long,
+    recent: List<Transaction>,
+    stamp: WidgetStamp,
+) {
     // Show as many rows as the widget's height allows.
     val size = LocalSize.current
     val rows = ((size.height.value - HEADER_HEIGHT_DP) / ROW_HEIGHT_DP).toInt()
@@ -91,7 +110,7 @@ private fun WidgetContent(netCents: Long, recent: List<Transaction>) {
 
     // Too short for any rows: show the net total on its own, centered and sized to fit.
     if (recent.isNotEmpty() && rows == 0) {
-        NetOnly(netCents)
+        NetOnly(label, netCents)
         return
     }
 
@@ -104,7 +123,7 @@ private fun WidgetContent(netCents: Long, recent: List<Transaction>) {
             .clickable(actionStartActivity(addEntryIntent(LocalContext.current))),
     ) {
         Text(
-            LocalContext.current.getString(R.string.widget_net),
+            label,
             style = TextStyle(color = GlanceTheme.colors.onSurfaceVariant, fontSize = 13.sp),
         )
         Text(
@@ -120,7 +139,7 @@ private fun WidgetContent(netCents: Long, recent: List<Transaction>) {
         if (recent.isEmpty()) {
             Spacer(GlanceModifier.height(6.dp))
             Text(
-                LocalContext.current.getString(R.string.widget_empty),
+                emptyText,
                 style = TextStyle(color = GlanceTheme.colors.onSurfaceVariant, fontSize = 13.sp),
             )
         } else if (rows > 0) {
@@ -132,7 +151,7 @@ private fun WidgetContent(netCents: Long, recent: List<Transaction>) {
                     .cornerRadius(16.dp)
                     .padding(horizontal = if (compact) 10.dp else 12.dp, vertical = 4.dp),
             ) {
-                recent.take(rows).forEach { TransactionRow(it, showDate = !compact) }
+                recent.take(rows).forEach { TransactionRow(it, stamp.takeUnless { compact }) }
             }
         }
     }
@@ -143,7 +162,7 @@ private fun WidgetContent(netCents: Long, recent: List<Transaction>) {
  * from the space available and the length of the string, so long totals still fit on one line.
  */
 @Composable
-private fun NetOnly(netCents: Long) {
+private fun NetOnly(label: String, netCents: Long) {
     val size = LocalSize.current
     val fontScale = LocalContext.current.resources.configuration.fontScale
     val amount = Money.formatSigned(netCents)
@@ -167,7 +186,7 @@ private fun NetOnly(netCents: Long) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
-            LocalContext.current.getString(R.string.widget_net),
+            label,
             style = TextStyle(color = GlanceTheme.colors.onSurfaceVariant, fontSize = labelSize.sp),
         )
         Text(
@@ -185,7 +204,7 @@ private fun NetOnly(netCents: Long) {
 
 
 @Composable
-private fun TransactionRow(transaction: Transaction, showDate: Boolean) {
+private fun TransactionRow(transaction: Transaction, stamp: WidgetStamp?) {
     Row(
         modifier = GlanceModifier.fillMaxWidth().height((ROW_HEIGHT_DP - 4).dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -196,10 +215,10 @@ private fun TransactionRow(transaction: Transaction, showDate: Boolean) {
             modifier = GlanceModifier.defaultWeight(),
             style = TextStyle(color = GlanceTheme.colors.onSecondaryContainer, fontSize = 14.sp),
         )
-        if (showDate) {
+        if (stamp != null) {
             Spacer(GlanceModifier.width(8.dp))
             Text(
-                localizedDateFormat("MMMd").format(Instant.ofEpochMilli(transaction.timestamp).atZone(ZoneId.systemDefault())),
+                localizedDateFormat(stamp.skeleton).format(Instant.ofEpochMilli(transaction.timestamp).atZone(ZoneId.systemDefault())),
                 maxLines = 1,
                 style = TextStyle(color = GlanceTheme.colors.onSurfaceVariant, fontSize = 12.sp),
             )
@@ -223,7 +242,7 @@ private fun TransactionRow(transaction: Transaction, showDate: Boolean) {
  * running app through onNewIntent; without them Android just brings the old task forward
  * and the request is lost.
  */
-private fun addEntryIntent(context: Context) =
+internal fun addEntryIntent(context: Context) =
     Intent(context, MainActivity::class.java)
         .setAction(MainActivity.ACTION_ADD_ENTRY)
         .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)

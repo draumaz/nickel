@@ -31,7 +31,7 @@ No DI framework, no Room, no navigation library. Data flows one way through `Sta
   - `Money.kt` — a global singleton (`Money.chosenCurrency` is Compose snapshot state) applied by `SettingsRepository`'s `init`, so app and widget format identically.
   - `SettingsRepository.kt` — SharedPreferences: dynamic color and currency code.
 - **`backup/`** — automatic CSV backups to a user-picked folder through a persisted Storage Access Framework tree grant (no storage permission). `LedgerBackup` writes one `nickel-backup-YYYY-MM-DD.csv` per day, keeps the newest 7 and never writes an empty ledger. `BackupWorker` is the periodic WorkManager job. Naming and pruning rules live in `data/Backups.kt` so they're unit-testable. The first-run prompt is on Home, and the folder and interval rows are in Settings → Your data.
-- **`widget/`** — a Glance home-screen widget that reads the ledger files directly. The ViewModel re-publishes it (`NickelWidget().updateAll`) on every ledger change after first load and on currency changes; the widget itself constructs a `SettingsRepository` on `provideGlance` to apply the currency.
+- **`widget/`** — two Glance home-screen widgets (`NickelWidget` for the overall balance, `TodayWidget` for today) sharing one layout (`WidgetContent`), both reading the ledger files directly. Every ledger change after first load and every currency change redraws them through `updateNickelWidgets()`. Add new widgets there, not at call sites. Each widget constructs a `SettingsRepository` in `provideGlance` to apply the currency. The Today receiver also redraws on date, time and time-zone changes, and its provider info asks for a 30-minute refresh so the new day still shows up if Android doesn't deliver DATE_CHANGED.
 
 ## Data model gotchas
 

@@ -2,6 +2,8 @@
     <string name="notice_listener_name">Nickel: учёт операций из уведомлений</string>
     <string name="widget_name">Баланс</string>
     <string name="widget_description">Итог и последние операции</string>
+    <string name="widget_today_name">Сегодня</string>
+    <string name="widget_today_description">Итог за сегодня и последние операции</string>
 
     <!-- Shared -->
     <string name="ok">ОК</string>
@@ -177,6 +179,8 @@
     <!-- Widget -->
     <string name="widget_net">Итого</string>
     <string name="widget_empty">Операций пока нет</string>
+    <string name="widget_today">Сегодня</string>
+    <string name="widget_today_empty">Сегодня операций нет</string>
 
     <!-- Notification capture -->
     <string name="channel_captured">Добавленные операции</string>
