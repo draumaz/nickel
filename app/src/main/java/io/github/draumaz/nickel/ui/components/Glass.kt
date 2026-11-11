@@ -62,19 +62,15 @@ fun Modifier.glass(
     shape: Shape,
     tint: Color,
     fallback: Color = tint,
-    blur: () -> Dp = { GlassDefaults.Blur },
+    blur: () -> Dp = DefaultBlur,
 ): Modifier = this then GlassElement(shape, tint, fallback, blur)
+
+/** Shared, so the element compares equal across recompositions and doesn't redraw for nothing. */
+private val DefaultBlur: () -> Dp = { GlassDefaults.Blur }
 
 object GlassDefaults {
     /** Strong enough that list text behind turns to colour, not readable ghosts. */
     val Blur = 24.dp
-
-    /**
-     * How much of the tonal colour a glass surface keeps. Below roughly 0.6 the blurred
-     * backdrop starts deciding the surface's colour and on-colour contrast can fall under 4.5:1
-     * against a saturated hero card, so this stays on the opaque side.
-     */
-    const val TintAlpha = 0.72f
 
     /**
      * The lighter glass for floating controls (the add button, header icon buttons): mostly
@@ -157,20 +153,20 @@ private class GlassNode(
 ) : Modifier.Node(), DrawModifierNode {
     private var renderNode: RenderNode? = null
     private var lastBlurPx = -1f
-    private var lastOutlineKey: Triple<Size, LayoutDirection, Shape>? = null
-    private var outline: Outline? = null
+    /** The last outline built, with what it was built for. */
+    private var cachedOutline: Pair<Triple<Size, LayoutDirection, Shape>, Outline>? = null
 
     override fun onDetach() {
         renderNode?.discardDisplayList()
         renderNode = null
         lastBlurPx = -1f
-        lastOutlineKey = null
+        cachedOutline = null
     }
 
     override fun ContentDrawScope.draw() {
         val key = Triple(size, layoutDirection, shape)
-        val shapeOutline = if (key == lastOutlineKey) outline!! else
-            shape.createOutline(size, layoutDirection, this).also { outline = it; lastOutlineKey = key }
+        val shapeOutline = cachedOutline?.takeIf { it.first == key }?.second
+            ?: shape.createOutline(size, layoutDirection, this).also { cachedOutline = key to it }
 
         val target = drawContext.canvas.nativeCanvas
         if (!GlassSupported || target !is RecordingCanvas || size.isEmpty()) {

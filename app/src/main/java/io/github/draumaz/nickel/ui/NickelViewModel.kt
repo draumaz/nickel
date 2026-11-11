@@ -95,7 +95,6 @@ class NickelViewModel(app: Application) : AndroidViewModel(app) {
     private val categoryFilter = MutableStateFlow<String?>(null)
 
     val settings: StateFlow<Settings> = settingsRepository.settings
-    val dynamicColorSupported: Boolean = settingsRepository.dynamicColorSupported
     val backup: StateFlow<BackupSettings> = settingsRepository.backup
 
     private val _backingUp = MutableStateFlow(false)

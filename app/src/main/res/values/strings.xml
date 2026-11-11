@@ -73,7 +73,6 @@
     <string name="section_appearance">Appearance</string>
     <string name="dynamic_color">Dynamic color</string>
     <string name="dynamic_color_on">Use the colors from your wallpaper</string>
-    <string name="dynamic_color_unsupported">Needs Android 12 or newer</string>
     <string name="section_money">Money</string>
     <string name="currency">Currency</string>
     <string name="system_default">System default</string>

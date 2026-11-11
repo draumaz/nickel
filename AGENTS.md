@@ -12,7 +12,7 @@ Nickel: a single-module Android expense tracker (Kotlin, Jetpack Compose, Materi
 ```
 
 Environment requirements (not checked in):
-- Android SDK with platform 37 (`sdk.dir` in `local.properties` or `ANDROID_HOME`)
+- Android SDK with platform 37.2 (Android 17 QPR2; `sdk.dir` in `local.properties` or `ANDROID_HOME`)
 - A connected device or emulator for installDebug and profile generation; profile generation uses a physical device only (`useConnectedDevices = true` in `baselineprofile/build.gradle.kts`), no emulator images
 - The Gradle daemon JVM (JDK 25, pinned in `gradle/gradle-daemon-jvm.properties`) is auto-downloaded via the foojay resolver, so no local JDK setup beyond that
 
@@ -39,6 +39,7 @@ No DI framework, no Room, no navigation library. Data flows one way through `Sta
 - **Keypad input is a digit string filling from the cents up**: `"449"` = 4.49, `"18945528"` = 189,455.28 (`Money.parseInput`). Formatting always shows two decimals even for currencies with other minor units.
 - **Built-in categories keep stable string ids** (e.g. `PAYCHECK`, `GROCERIES`) so old ledgers keep loading. Custom categories get `custom:income:label-slug` ids, with icon/shape/tone derived deterministically from the label hash. Icons and shapes are stored as registry key strings, never as objects, so `Category` stays plain data and saveable across configuration changes. Unknown keys fall back to a default rather than crashing.
 - **Ledger JSON corruption is tolerated**: reads are wrapped in `runCatching` and fall back to empty. Writes are temp-file-then-rename, and categories are written before transactions so a crash can't leave transactions pointing at unsaved categories.
+- **Frosted glass needs QPR2 (API 37.2)**, but `minSdk` can't name a minor level, so it's 37 and everything glass is gated on `GlassSupported` (`ui/components/Glass.kt`), falling back to solid tonal fills. `Modifier.glass` blurs only what's drawn in the same window. The entry sheet is its own window, so Home blurs *itself* behind it (driven by `EntrySheet`'s `onFrost`). Never use `FLAG_BLUR_BEHIND` for it: the system adds a dim layer it owns, and Android drops touches through it as untrusted, so the list can't scroll while the sheet closes.
 - **No network permission** — the app is privacy-first by design. Don't add internet access, analytics, or dependencies that pull in network code.
 
 ## Build gotchas

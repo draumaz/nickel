@@ -5,7 +5,6 @@ import android.content.ClipData
 import android.content.Context
 import android.content.Intent
 import android.graphics.drawable.Icon
-import android.os.Build
 import android.service.chooser.ChooserAction
 import androidx.core.content.FileProvider
 import io.github.draumaz.nickel.R
@@ -41,21 +40,16 @@ object ExportShare {
 
         val save = SaveExportActivity.intent(context, file)
         val chooser = Intent.createChooser(send, context.getString(R.string.export_chooser, file.name))
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            // Android 14+ shows custom actions as buttons along the top of the share sheet.
-            val pending = PendingIntent.getActivity(
-                context, 0, save, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
-            )
-            val action = ChooserAction.Builder(
-                Icon.createWithResource(context, R.drawable.ic_save_file),
-                context.getString(R.string.save_to_files),
-                pending,
-            ).build()
-            chooser.putExtra(Intent.EXTRA_CHOOSER_CUSTOM_ACTIONS, arrayOf(action))
-        } else {
-            // Older share sheets list extra targets among the apps instead.
-            chooser.putExtra(Intent.EXTRA_INITIAL_INTENTS, arrayOf(save))
-        }
+        // The share sheet shows custom actions as buttons along its top.
+        val pending = PendingIntent.getActivity(
+            context, 0, save, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+        val action = ChooserAction.Builder(
+            Icon.createWithResource(context, R.drawable.ic_save_file),
+            context.getString(R.string.save_to_files),
+            pending,
+        ).build()
+        chooser.putExtra(Intent.EXTRA_CHOOSER_CUSTOM_ACTIONS, arrayOf(action))
         context.startActivity(chooser)
     }
 }

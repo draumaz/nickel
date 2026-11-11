@@ -71,7 +71,6 @@
     <string name="section_appearance">Оформление</string>
     <string name="dynamic_color">Динамические цвета</string>
     <string name="dynamic_color_on">Цвета из ваших обоев</string>
-    <string name="dynamic_color_unsupported">Нужен Android 12 или новее</string>
     <string name="section_money">Деньги</string>
     <string name="currency">Валюта</string>
     <string name="system_default">Как в системе</string>

@@ -2,7 +2,6 @@ package io.github.draumaz.nickel.data
 
 import android.content.Context
 import android.content.SharedPreferences
-import android.os.Build
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -34,11 +33,9 @@ data class BackupSettings(
 class SettingsRepository(context: Context) {
     private val prefs = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
 
-    val dynamicColorSupported: Boolean = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
-
     private val _settings = MutableStateFlow(
         Settings(
-            dynamicColor = prefs.getBoolean(KEY_DYNAMIC_COLOR, dynamicColorSupported),
+            dynamicColor = prefs.getBoolean(KEY_DYNAMIC_COLOR, true),
             currencyCode = prefs.getString(KEY_CURRENCY, null),
             autoAddNotices = prefs.getBoolean(KEY_AUTO_ADD_NOTICES, false),
         )

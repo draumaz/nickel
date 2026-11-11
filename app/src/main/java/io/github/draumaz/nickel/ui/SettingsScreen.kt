@@ -8,7 +8,6 @@ import androidx.compose.ui.res.stringResource
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.os.Build
 import android.provider.Settings
 import androidx.core.app.NotificationManagerCompat
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -183,11 +182,8 @@ fun SettingsScreen(viewModel: NickelViewModel, onBack: () -> Unit) {
                 icon = Icons.Rounded.Palette,
                 iconShape = MaterialShapes.Cookie7Sided,
                 title = stringResource(R.string.dynamic_color),
-                subtitle = stringResource(
-                    if (viewModel.dynamicColorSupported) R.string.dynamic_color_on else R.string.dynamic_color_unsupported
-                ),
+                subtitle = stringResource(R.string.dynamic_color_on),
                 shape = segmentShape(0, 2),
-                enabled = viewModel.dynamicColorSupported,
                 checked = settings.dynamicColor,
                 onCheckedChange = {
                     haptics.performHapticFeedback(
@@ -392,8 +388,7 @@ private fun NotificationAccessRow(viewModel: NickelViewModel, autoAdd: Boolean, 
         ActivityResultContracts.RequestPermission(),
     ) { }
     fun requestAlertsIfNeeded() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-            context.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) !=
+        if (context.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) !=
             android.content.pm.PackageManager.PERMISSION_GRANTED
         ) {
             notificationPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS)
@@ -443,15 +438,11 @@ private fun hasListenerAccess(context: Context): Boolean =
     NotificationManagerCompat.getEnabledListenerPackages(context).contains(context.packageName)
 
 /**
- * Android 11+ can open the per-app page for Nickel's own listener, one switch away from a
- * grant, instead of dropping the user into the full notification-access list. Older builds,
- * and OEMs that strip the detail activity, fall back to the list.
+ * Opens the per-app page for Nickel's own listener, one switch away from a grant, instead of
+ * dropping the user into the full notification-access list. OEMs that strip the detail
+ * activity fall back to the list.
  */
 private fun openNotificationAccess(context: Context) {
-    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
-        context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
-        return
-    }
     val detail = Intent(Settings.ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS)
         .putExtra(
             Settings.EXTRA_NOTIFICATION_LISTENER_COMPONENT_NAME,

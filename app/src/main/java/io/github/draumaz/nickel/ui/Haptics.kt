@@ -1,7 +1,6 @@
 package io.github.draumaz.nickel.ui
 
 import android.content.Context
-import android.os.Build
 import android.os.VibrationAttributes
 import android.os.VibrationEffect
 import android.os.Vibrator
@@ -19,11 +18,7 @@ import android.os.VibrationEffect.Composition.PRIMITIVE_TICK
 object Haptics {
 
     private fun vibrator(context: Context): Vibrator? =
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            context.getSystemService(VibratorManager::class.java)?.defaultVibrator
-        } else {
-            context.getSystemService(Vibrator::class.java)
-        }
+        context.getSystemService(VibratorManager::class.java)?.defaultVibrator
 
     /**
      * A saved entry landing back in its shape: a sharp click for the hit with a thud's low body
@@ -32,8 +27,6 @@ object Haptics {
     fun slam(context: Context) {
         val vibrator = vibrator(context)?.takeIf { it.hasVibrator() } ?: return
         val effect = when {
-            Build.VERSION.SDK_INT < Build.VERSION_CODES.S ->
-                VibrationEffect.createPredefined(VibrationEffect.EFFECT_HEAVY_CLICK)
             // Not every motor has THUD; without it a tick stands in for the rebound, landing
             // around the overshoot's peak.
             vibrator.areAllPrimitivesSupported(PRIMITIVE_CLICK, PRIMITIVE_THUD) ->
@@ -55,7 +48,6 @@ object Haptics {
     fun fabToggle(context: Context, opening: Boolean) {
         val vibrator = vibrator(context)?.takeIf { it.hasVibrator() } ?: return
         val effect = if (
-            Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
             vibrator.areAllPrimitivesSupported(PRIMITIVE_SPIN, PRIMITIVE_CLICK, PRIMITIVE_QUICK_FALL, PRIMITIVE_TICK)
         ) {
             if (opening) {
@@ -77,13 +69,7 @@ object Haptics {
         play(vibrator, effect)
     }
 
-    private fun play(vibrator: Vibrator, effect: VibrationEffect) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            // Touch usage, so the system's touch-feedback setting is respected.
-            vibrator.vibrate(effect, VibrationAttributes.createForUsage(VibrationAttributes.USAGE_TOUCH))
-        } else {
-            @Suppress("DEPRECATION")
-            vibrator.vibrate(effect)
-        }
-    }
+    // Touch usage, so the system's touch-feedback setting is respected.
+    private fun play(vibrator: Vibrator, effect: VibrationEffect) =
+        vibrator.vibrate(effect, VibrationAttributes.createForUsage(VibrationAttributes.USAGE_TOUCH))
 }
