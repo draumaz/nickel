@@ -40,6 +40,9 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.ui.graphics.TileMode
+import androidx.compose.ui.graphics.BlurEffect
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -263,7 +266,20 @@ fun HomeScreen(
         }
     }
 
+    /**
+     * How frosted Home is behind a morphing entry sheet, 0 to 1, so the scallop stays glass
+     * like the button it grew from. Home blurs itself rather than the sheet's window blurring
+     * what's behind it: the system's blur-behind adds a layer the system owns under the sheet,
+     * and Android drops touches through another owner's layer, so the list couldn't be scrolled
+     * until the sheet's window was gone. Read only in the layer block, so it never recomposes.
+     */
+    val frost = remember { mutableFloatStateOf(0f) }
+
     Scaffold(
+        modifier = Modifier.graphicsLayer {
+            val radius = GlassDefaults.Blur.toPx() * frost.floatValue
+            renderEffect = if (radius < 0.5f) null else BlurEffect(radius, radius, TileMode.Clamp)
+        },
         containerColor = MaterialTheme.colorScheme.surfaceContainer,
         snackbarHost = { SnackbarHost(snackbar) },
         floatingActionButtonPosition = FabPosition.Center,
@@ -403,6 +419,7 @@ fun HomeScreen(
             noteMemory = noteMemory,
             onCreateCategory = viewModel::addCategory,
             onClosing = { sheetClosing = true },
+            onFrost = { frost.floatValue = it },
             onDismiss = {
                 sheetKind = null
                 editing = null
