@@ -8,6 +8,10 @@ import kotlin.math.abs
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.material3.SwipeToDismissBoxState
 import androidx.compose.ui.platform.LocalResources
+import io.github.draumaz.nickel.ui.components.GlassSupported
+import io.github.draumaz.nickel.ui.components.GlassDefaults
+import io.github.draumaz.nickel.ui.components.GlassIconButton
+import io.github.draumaz.nickel.ui.components.glass
 import io.github.draumaz.nickel.ui.components.localizedDateFormat
 import io.github.draumaz.nickel.ui.components.displayLabel
 import androidx.compose.ui.res.stringResource
@@ -72,9 +76,7 @@ import androidx.compose.material3.ContainedLoadingIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FabPosition
-import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialShapes
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -101,7 +103,6 @@ import androidx.compose.material3.toShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -152,8 +153,6 @@ import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
 import androidx.compose.ui.geometry.isSpecified
 import androidx.compose.runtime.withFrameNanos
-import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -178,40 +177,6 @@ fun HomeScreen(
         infiniteRepeatable(tween(14_000, easing = LinearEasing)),
         label = "badgeTurn",
     )
-
-    // Hide the add button while scrolling down through the list; bring it back on any
-    // upward scroll or at the top.
-    var fabShownByScroll by remember { mutableStateOf(true) }
-    LaunchedEffect(listState) {
-        var lastIndex = listState.firstVisibleItemIndex
-        var lastOffset = listState.firstVisibleItemScrollOffset
-        snapshotFlow { listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset }
-            .collect { (index, offset) ->
-                val delta = when {
-                    index > lastIndex -> Int.MAX_VALUE
-                    index < lastIndex -> Int.MIN_VALUE
-                    else -> offset - lastOffset
-                }
-                when {
-                    index == 0 && offset == 0 -> fabShownByScroll = true
-                    delta > 12 -> fabShownByScroll = false
-                    delta < -12 -> fabShownByScroll = true
-                }
-                lastIndex = index
-                lastOffset = offset
-            }
-    }
-    // Hidden only while actually moving through the list: once the user stops (a fling
-    // counts as moving until it settles) and lingers, the add button comes back.
-    LaunchedEffect(listState) {
-        snapshotFlow { listState.isScrollInProgress || fabShownByScroll }
-            .collectLatest { busyOrShown ->
-                if (!busyOrShown) {
-                    delay(FAB_LINGER_MS)
-                    fabShownByScroll = true
-                }
-            }
-    }
 
     var sheetKind by remember { mutableStateOf<Kind?>(null) }
     /**
@@ -253,7 +218,6 @@ fun HomeScreen(
     // entry already open is left alone instead of being thrown away for a blank one.
     LaunchedEffect(addEntryPending, state.loading) {
         if (!addEntryPending || state.loading) return@LaunchedEffect
-        fabShownByScroll = true
         if (sheetKind == null) {
             repeat(10) { if (!fabOrigin.centerOnScreen.isSpecified) withFrameNanos { } }
             openNewEntry()
@@ -304,7 +268,7 @@ fun HomeScreen(
         snackbarHost = { SnackbarHost(snackbar) },
         floatingActionButtonPosition = FabPosition.Center,
         floatingActionButton = {
-            val fabVisible by remember { derivedStateOf { !state.loading && fabShownByScroll } }
+            val fabVisible = !state.loading
             ScallopFab(
                 origin = fabOrigin,
                 enabled = fabVisible && (sheetKind == null || sheetClosing),
@@ -333,14 +297,16 @@ fun HomeScreen(
                 viewModel.refresh()
             },
             state = pullState,
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(top = padding.calculateTopPadding()),
+            // Edge to edge, like the bottom: the list scrolls up under the status bar rather than
+            // being cut off at its edge, so only the content and the indicator take the inset.
+            modifier = Modifier.fillMaxSize(),
             indicator = {
                 PullToRefreshDefaults.LoadingIndicator(
                     state = pullState,
                     isRefreshing = refreshing,
-                    modifier = Modifier.align(Alignment.TopCenter),
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(top = padding.calculateTopPadding()),
                 )
             },
         ) {
@@ -350,7 +316,8 @@ fun HomeScreen(
                 contentPadding = PaddingValues(
                     start = 16.dp,
                     end = 16.dp,
-                    bottom = padding.calculateBottomPadding() + 112.dp,
+                    top = padding.calculateTopPadding(),
+                    bottom = padding.calculateBottomPadding() + FabSize + 44.dp,
                 ),
             ) {
                 item(key = "header", contentType = "header") { Header(onOpenSettings) }
@@ -458,8 +425,14 @@ fun HomeScreen(
     }
 }
 
-/** How long the list must sit still before a scrolled-away add button comes back. */
-private const val FAB_LINGER_MS = 2_000L
+/**
+ * The add button's size: Expressive's medium FAB, so there's enough glass to read as glass.
+ * The list's bottom padding follows it so the last row can always scroll clear.
+ */
+private val FabSize = 80.dp
+
+/** The plus as a fraction of [FabSize]; matches [ScallopOrigin.iconScale] so the morph hands over seamlessly. */
+private const val FabIconScale = 0.44f
 
 /** The category icon's size relative to its badge, as [CategoryBadge] draws it. */
 private const val BadgeIconScale = 0.46f
@@ -541,8 +514,11 @@ private fun ScallopFab(
     // stays opaque to keep its contrast over whatever scrolls underneath.
     val container = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.88f)
     val content = MaterialTheme.colorScheme.onPrimaryContainer
+    // The sheet grows out of whatever the button actually looks like, so on QPR2 that's the
+    // glass tint; the sheet's window frosts the list behind it to match (see frostBehind).
+    val glassTint = MaterialTheme.colorScheme.primaryContainer.copy(alpha = GlassDefaults.ControlTintAlpha)
     SideEffect {
-        origin.color = container
+        origin.color = if (GlassSupported) glassTint else container
         origin.iconColor = content
         origin.rotation = { idleRotation + kick.value }
     }
@@ -555,7 +531,7 @@ private fun ScallopFab(
     val shape = MaterialShapes.Cookie12Sided.toShape()
     Box(
         modifier
-            .size(68.dp)
+            .size(FabSize)
             .onGloballyPositioned {
                 origin.centerOnScreen = it.localToScreen(Offset(it.size.width / 2f, it.size.height / 2f))
                 origin.diameter = it.size.width.toFloat()
@@ -578,13 +554,19 @@ private fun ScallopFab(
             Modifier
                 .matchParentSize()
                 .graphicsLayer { rotationZ = idleRotation + kick.value }
-                .background(container, shape)
+                // Mostly glass, with a wash of the (dynamic) primaryContainer so the scallop's
+                // edge still reads over plain rows. Pre-QPR2 keeps the see-through tonal fill.
+                .glass(
+                    shape = shape,
+                    tint = glassTint,
+                    fallback = container,
+                )
         )
         Icon(
             Icons.Rounded.Add,
             contentDescription = null,
             tint = content,
-            modifier = Modifier.size(30.dp),
+            modifier = Modifier.size(FabSize * FabIconScale),
         )
     }
 }
@@ -618,16 +600,7 @@ private fun SettingsButton(onClick: () -> Unit) {
         MaterialTheme.motionScheme.defaultSpatialSpec(),
         label = "gear",
     )
-    val haptics = LocalHapticFeedback.current
-    FilledTonalIconButton(
-        onClick = {
-            haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
-            onClick()
-        },
-        shapes = IconButtonDefaults.shapes(),
-        interactionSource = interaction,
-        modifier = Modifier.size(48.dp),
-    ) {
+    GlassIconButton(onClick = onClick, interactionSource = interaction) {
         Icon(
             Icons.Rounded.Settings,
             contentDescription = stringResource(R.string.settings),

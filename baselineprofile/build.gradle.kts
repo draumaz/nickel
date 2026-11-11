@@ -5,10 +5,12 @@ plugins {
 
 android {
     namespace = "io.github.draumaz.nickel.baselineprofile"
-    compileSdk = 37
+    compileSdk {
+        version = release(37) { minorApiLevel = 2 }
+    }
 
     defaultConfig {
-        minSdk = 29
+        minSdk = 37
         targetSdk = 37
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

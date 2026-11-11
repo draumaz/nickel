@@ -2,6 +2,10 @@ package io.github.draumaz.nickel.ui
 
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.window.DialogWindowProvider
+import kotlin.math.roundToInt
+import androidx.compose.runtime.withFrameNanos
+import io.github.draumaz.nickel.ui.components.GlassSupported
+import io.github.draumaz.nickel.ui.components.GlassDefaults
 import android.view.WindowManager
 import android.view.View
 import androidx.compose.ui.unit.sp
@@ -431,6 +435,10 @@ fun EntrySheet(
             origin.covered = true
         }
         DisposableEffect(Unit) { onDispose { origin.covered = false } }
+        if (GlassSupported) {
+            val frostPx = with(LocalDensity.current) { GlassDefaults.Blur.toPx() }
+            LaunchedEffect(Unit) { motion.frostBehind(frostPx) }
+        }
     }
 
     fun close(slam: Boolean = true, then: () -> Unit) {
@@ -592,6 +600,41 @@ private class ScallopMotion(private val morphing: Boolean) {
         window.addFlags(WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE)
     }
 
+    /**
+     * Frosts everything behind the sheet's window in step with the morph, so a scallop grown
+     * out of the glass add button stays glass. The button's own blur is a backdrop effect in
+     * Home's window, and the sheet is a window of its own that can't sample Home's pixels, so
+     * matching it takes the compositor's cross-window blur-behind instead.
+     *
+     * Opening goes straight to full strength, before the window's first frame where possible:
+     * blur-behind is a window attribute, so every change is a round trip through the window
+     * manager and lands a frame or two late. Ramping it in from nothing left the first frames of
+     * the scallop over a sharp list, exactly the mismatch with the button this is here to hide.
+     * On the way home the frost thins out over the last [FrostRamp] of the shrink, where a late
+     * frame only means the screen clears a touch after the shape, never a sharp glass scallop.
+     * Skipped when the compositor has cross-window blur off (battery saver, some tunneled
+     * video): the plain scrim alone still works.
+     */
+    suspend fun frostBehind(radiusPx: Float) {
+        var window = (sheetView?.parent as? DialogWindowProvider)?.window
+        while (window == null) {
+            withFrameNanos { }
+            window = (sheetView?.parent as? DialogWindowProvider)?.window
+        }
+        if (!window.windowManager.isCrossWindowBlurEnabled) return
+        window.addFlags(WindowManager.LayoutParams.FLAG_BLUR_BEHIND)
+        var applied = -1
+        // shrinking isn't snapshot state, but it only ever flips while grow is animating, so the
+        // next grow change re-reads it.
+        snapshotFlow { if (shrinking) (grow.value / FrostRamp).coerceIn(0f, 1f) else 1f }.collect { f ->
+            val radius = (radiusPx * f).roundToInt()
+            if (radius != applied) {
+                applied = radius
+                window.attributes = window.attributes.apply { blurBehindRadius = radius }
+            }
+        }
+    }
+
     fun confirm(value: SheetValue): Boolean {
         if (!morphing || value != SheetValue.Hidden) return true
         onShrinkRequest()
@@ -632,6 +675,9 @@ private const val SlamSettleMillis = 180L
 
 /** Growth at which a shrinking scallop is close enough to the button to hand over to it. */
 private const val HandoverAt = 0.02f
+
+/** Growth below which a closing sheet's frosted backdrop thins out (see ScallopMotion.frostBehind). */
+private const val FrostRamp = 0.15f
 
 /** Initial growth velocity, in progress per second, so the scallop moves on the first frame. */
 private const val GrowKick = 4f
