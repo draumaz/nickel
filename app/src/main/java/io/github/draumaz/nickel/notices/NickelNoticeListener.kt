@@ -12,8 +12,11 @@ import android.service.notification.StatusBarNotification
 import androidx.core.app.NotificationCompat
 import io.github.draumaz.nickel.R
 import io.github.draumaz.nickel.data.Categories
+import io.github.draumaz.nickel.data.Category
+import io.github.draumaz.nickel.data.Kind
 import io.github.draumaz.nickel.data.Money
 import io.github.draumaz.nickel.data.NoticeParser
+import io.github.draumaz.nickel.data.NoteMemory
 import io.github.draumaz.nickel.data.NoticeTwins
 import io.github.draumaz.nickel.data.RecentCapture
 import io.github.draumaz.nickel.data.SettingsRepository
@@ -83,8 +86,8 @@ class NickelNoticeListener : NotificationListenerService() {
             id = System.nanoTime(),
             amountCents = match.amountCents,
             kind = match.kind,
-            // Notifications rarely name a category; drop them in "Other" and let
-            // the user reassign when they next open the app.
+            // Notifications rarely name a category; "Other" until the coroutine below
+            // checks the ledger for an earlier entry with the same note.
             category = Categories.fallback(match.kind),
             note = note,
             timestamp = sbn.postTime,
@@ -103,9 +106,13 @@ class NickelNoticeListener : NotificationListenerService() {
 
         scope.launch {
             val repository = TransactionRepository.get(applicationContext)
-            repository.upsert(transaction)
+            // Same guess the entry sheet makes when a note is typed: file it where the last
+            // entry with this note went. The kind stays as parsed, since the alert says
+            // whether money came in or went out; anything unmatched stays in "Other".
+            val filed = transaction.copy(category = recall(repository, note, match.kind) ?: transaction.category)
+            repository.upsert(filed)
             updateNickelWidgets(applicationContext)
-            notifyCaptured(transaction, localized(match.source))
+            notifyCaptured(filed, localized(match.source))
         }
     }
 
@@ -139,11 +146,27 @@ class NickelNoticeListener : NotificationListenerService() {
     private fun adoptMerchant(twin: RecentCapture, merchant: String, recent: List<RecentCapture>) {
         rememberCaptures(recent.map { if (it == twin) it.copy(note = merchant, namesMerchant = true) else it })
         scope.launch {
-            TransactionRepository.get(applicationContext).update(twin.transactionId) {
-                if (it.note == twin.note) it.copy(note = merchant) else it
+            val repository = TransactionRepository.get(applicationContext)
+            val category = recall(repository, merchant, twin.kind)
+            repository.update(twin.transactionId) {
+                if (it.note != twin.note) return@update it
+                // The generic note's guess (usually "Other") gives way to the merchant's, but
+                // only while it's still the default, so a category the user picked is kept.
+                val keep = category == null || it.category != Categories.fallback(it.kind)
+                it.copy(note = merchant, category = if (keep) it.category else category)
             }
             updateNickelWidgets(applicationContext)
         }
+    }
+
+    /**
+     * The category earlier entries with [note] were filed under, via the same [NoteMemory]
+     * the entry sheet uses. A cold process (the app never opened since boot) has no ledger
+     * in memory yet, so it's read from disk first rather than guessed against nothing.
+     */
+    private suspend fun recall(repository: TransactionRepository, note: String, kind: Kind): Category? {
+        val ledger = repository.ledger.value ?: run { repository.load(); repository.ledger.value } ?: return null
+        return NoteMemory.of(ledger.transactions).lookup(note, kind, anyKind = false)?.category
     }
 
     private fun recentCaptures(): List<RecentCapture> = NoticeTwins.decode(
