@@ -1,5 +1,6 @@
 package io.github.draumaz.nickel.ui
 
+import io.github.draumaz.nickel.BuildConfig
 import io.github.draumaz.nickel.ui.components.GlassIconButton
 import io.github.draumaz.nickel.ui.components.localizedDateFormat
 import io.github.draumaz.nickel.ui.components.displayLabel
@@ -547,7 +548,7 @@ private fun Footer() {
             SpanStyle(color = MaterialTheme.colorScheme.primary, textDecoration = TextDecoration.Underline)
         )
         val appName = stringResource(R.string.app_name)
-        val version = stringResource(R.string.about_version)
+        val version = stringResource(R.string.about_version, BuildConfig.VERSION_NAME)
         // Split around the placeholder so only the author's name carries the link.
         val (byBefore, byAfter) = stringResource(R.string.about_by, "\u0000").split('\u0000', limit = 2)
             .let { it[0] to it.getOrElse(1) { "" } }

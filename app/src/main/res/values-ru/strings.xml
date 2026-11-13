@@ -119,7 +119,7 @@
     <string name="backup_prompt_body">Nickel может раз в день сохранять копию ваших операций в CSV-файл в выбранную вами папку. Данные не покидают телефон, если папка ни с чем не синхронизируется. Это можно изменить позже в настройках.</string>
     <string name="backup_choose_folder">Выбрать папку</string>
     <string name="not_now">Не сейчас</string>
-    <string name="about_version">, 1.0.1</string>
+    <string name="about_version">, %1$s</string>
     <string name="about_by">автор: %1$s</string>
     <string name="currency_dialog_body">Меняет только символ, с которым показываются суммы. Суммы не пересчитываются.</string>
     <string name="search">Поиск</string>
