@@ -240,7 +240,7 @@ private fun TransactionRow(transaction: Transaction, stamp: WidgetStamp?) {
  * A widget tap means "I just spent something": it opens straight into a new entry, as if the
  * + scallop had been pressed. SINGLE_TOP with CLEAR_TOP hands the request to an already
  * running app through onNewIntent; without them Android just brings the old task forward
- * and the request is lost.
+ * and the request is lost. Settings can turn this off; [MainActivity] checks it on arrival.
  */
 internal fun addEntryIntent(context: Context) =
     Intent(context, MainActivity::class.java)

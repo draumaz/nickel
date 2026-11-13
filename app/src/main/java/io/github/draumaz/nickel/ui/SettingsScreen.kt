@@ -57,6 +57,7 @@ import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Upload
+import androidx.compose.material.icons.rounded.Widgets
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -218,7 +219,21 @@ fun SettingsScreen(viewModel: NickelViewModel, onBack: () -> Unit) {
             }
 
             SectionLabel(stringResource(R.string.section_automation))
-            NotificationAccessRow(viewModel, settings.autoAddNotices, haptics)
+            NotificationAccessRow(viewModel, settings.autoAddNotices, haptics, shape = segmentShape(0, 2))
+            SettingRow(
+                icon = Icons.Rounded.Widgets,
+                iconShape = MaterialShapes.Pentagon,
+                title = stringResource(R.string.widget_opens_entry),
+                subtitle = stringResource(R.string.widget_opens_entry_on),
+                shape = segmentShape(1, 2),
+                checked = settings.widgetOpensEntry,
+                onCheckedChange = {
+                    haptics.performHapticFeedback(
+                        if (it) HapticFeedbackType.ToggleOn else HapticFeedbackType.ToggleOff
+                    )
+                    viewModel.setWidgetOpensEntry(it)
+                },
+            )
 
             SectionLabel(stringResource(R.string.section_data))
             SettingRow(
@@ -379,7 +394,12 @@ private fun SettingRow(
  * reads as on once the user actually grants it there.
  */
 @Composable
-private fun NotificationAccessRow(viewModel: NickelViewModel, autoAdd: Boolean, haptics: HapticFeedback) {
+private fun NotificationAccessRow(
+    viewModel: NickelViewModel,
+    autoAdd: Boolean,
+    haptics: HapticFeedback,
+    shape: RoundedCornerShape,
+) {
     val context = LocalContext.current
     var hasAccess by remember { mutableStateOf(hasListenerAccess(context)) }
     // Captured transactions surface as notifications (with a Delete button), so the
@@ -414,7 +434,7 @@ private fun NotificationAccessRow(viewModel: NickelViewModel, autoAdd: Boolean, 
         iconShape = MaterialShapes.Cookie6Sided,
         title = stringResource(R.string.auto_add),
         subtitle = stringResource(if (hasAccess) R.string.auto_add_on else R.string.auto_add_needs_access),
-        shape = segmentShape(0, 1),
+        shape = shape,
         checked = autoAdd && hasAccess,
         onCheckedChange = { enabled ->
             haptics.performHapticFeedback(

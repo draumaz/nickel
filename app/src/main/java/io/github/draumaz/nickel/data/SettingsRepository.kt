@@ -13,6 +13,8 @@ data class Settings(
     val currencyCode: String?,
     /** Add transactions parsed out of payment and bank notifications. */
     val autoAddNotices: Boolean,
+    /** A widget tap opens straight into a new entry rather than just opening the app. */
+    val widgetOpensEntry: Boolean,
 )
 
 data class BackupSettings(
@@ -38,6 +40,7 @@ class SettingsRepository(context: Context) {
             dynamicColor = prefs.getBoolean(KEY_DYNAMIC_COLOR, true),
             currencyCode = prefs.getString(KEY_CURRENCY, null),
             autoAddNotices = prefs.getBoolean(KEY_AUTO_ADD_NOTICES, false),
+            widgetOpensEntry = prefs.getBoolean(KEY_WIDGET_OPENS_ENTRY, true),
         )
     )
     val settings: StateFlow<Settings> = _settings.asStateFlow()
@@ -134,10 +137,16 @@ class SettingsRepository(context: Context) {
         _settings.value = _settings.value.copy(autoAddNotices = enabled)
     }
 
+    fun setWidgetOpensEntry(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_WIDGET_OPENS_ENTRY, enabled).apply()
+        _settings.value = _settings.value.copy(widgetOpensEntry = enabled)
+    }
+
     private companion object {
         const val KEY_DYNAMIC_COLOR = "dynamic_color"
         const val KEY_CURRENCY = "currency"
         const val KEY_AUTO_ADD_NOTICES = "auto_add_notices"
+        const val KEY_WIDGET_OPENS_ENTRY = "widget_opens_entry"
         const val BACKUP_PREFIX = "backup_"
         const val KEY_BACKUP_FOLDER = "backup_folder"
         const val KEY_BACKUP_FOLDER_NAME = "backup_folder_name"

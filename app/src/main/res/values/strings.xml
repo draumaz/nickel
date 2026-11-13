@@ -83,6 +83,8 @@
     <string name="auto_add">Auto-add from notifications</string>
     <string name="auto_add_on">Watch payment and bank alerts for amounts</string>
     <string name="auto_add_needs_access">Allow notification access in Android settings</string>
+    <string name="widget_opens_entry">Open a new entry from the widget</string>
+    <string name="widget_opens_entry_on">Tapping a home-screen widget starts logging a transaction</string>
     <string name="section_data">Your data</string>
     <string name="import_csv">Import from CSV</string>
     <string name="import_csv_subtitle">Bring in transactions from Dime or a spreadsheet</string>

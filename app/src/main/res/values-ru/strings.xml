@@ -81,6 +81,8 @@
     <string name="auto_add">Добавлять из уведомлений</string>
     <string name="auto_add_on">Находить суммы в уведомлениях банков и платёжных сервисов</string>
     <string name="auto_add_needs_access">Разрешите доступ к уведомлениям в настройках Android</string>
+    <string name="widget_opens_entry">Новая запись из виджета</string>
+    <string name="widget_opens_entry_on">Нажатие на виджет сразу открывает добавление операции</string>
     <string name="section_data">Ваши данные</string>
     <string name="import_csv">Импорт из CSV</string>
     <string name="import_csv_subtitle">Перенесите операции из Dime или таблицы</string>

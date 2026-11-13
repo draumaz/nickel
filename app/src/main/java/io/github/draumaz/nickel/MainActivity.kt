@@ -1,6 +1,7 @@
 package io.github.draumaz.nickel
 
 import android.content.Intent
+import io.github.draumaz.nickel.data.SettingsRepository
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -69,7 +70,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
-        if (savedInstanceState == null) addEntryPending = intent?.action == ACTION_ADD_ENTRY
+        if (savedInstanceState == null) addEntryPending = wantsNewEntry(intent)
         setContent {
             val viewModel: NickelViewModel = viewModel()
             val settings by viewModel.settings.collectAsStateWithLifecycle()
@@ -170,8 +171,16 @@ class MainActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        if (intent.action == ACTION_ADD_ENTRY) addEntryPending = true
+        if (wantsNewEntry(intent)) addEntryPending = true
     }
+
+    /**
+     * The widget always sends [ACTION_ADD_ENTRY] and the setting is checked here instead, so
+     * flipping it takes effect on the next tap without redrawing every placed widget. With it
+     * off, a tap just brings the app forward wherever it was left.
+     */
+    private fun wantsNewEntry(intent: Intent?): Boolean =
+        intent?.action == ACTION_ADD_ENTRY && SettingsRepository(this).settings.value.widgetOpensEntry
 
     companion object {
         const val ACTION_ADD_ENTRY = "io.github.draumaz.nickel.action.ADD_ENTRY"

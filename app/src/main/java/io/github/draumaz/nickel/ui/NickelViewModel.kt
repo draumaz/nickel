@@ -198,6 +198,8 @@ class NickelViewModel(app: Application) : AndroidViewModel(app) {
 
     fun setAutoAddNotices(enabled: Boolean) = settingsRepository.setAutoAddNotices(enabled)
 
+    fun setWidgetOpensEntry(enabled: Boolean) = settingsRepository.setWidgetOpensEntry(enabled)
+
     fun setCurrency(code: String?) {
         settingsRepository.setCurrency(code)
         viewModelScope.launch { updateNickelWidgets(getApplication()) }
