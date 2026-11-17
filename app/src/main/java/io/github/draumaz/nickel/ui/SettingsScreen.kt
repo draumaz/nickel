@@ -50,6 +50,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.Apps
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.CurrencyExchange
 import androidx.compose.material.icons.rounded.History
@@ -134,6 +135,7 @@ fun SettingsScreen(viewModel: NickelViewModel, onBack: () -> Unit) {
     var showCurrency by rememberSaveable { mutableStateOf(false) }
     val backup by viewModel.backup.collectAsStateWithLifecycle()
     var showBackupInterval by rememberSaveable { mutableStateOf(false) }
+    var showWatchedApps by rememberSaveable { mutableStateOf(false) }
     val pickBackupFolder = rememberBackupFolderPicker { uri ->
         uri?.let {
             haptics.performHapticFeedback(HapticFeedbackType.Confirm)
@@ -220,13 +222,28 @@ fun SettingsScreen(viewModel: NickelViewModel, onBack: () -> Unit) {
             }
 
             SectionLabel(stringResource(R.string.section_automation))
-            NotificationAccessRow(viewModel, settings.autoAddNotices, haptics, shape = segmentShape(0, 2))
+            NotificationAccessRow(viewModel, settings.autoAddNotices, haptics, shape = segmentShape(0, 3))
+            val watchedApps by viewModel.noticeApps.collectAsStateWithLifecycle()
+            val watchedCount = watchedApps?.size ?: 0
+            SettingRow(
+                icon = Icons.Rounded.Apps,
+                iconShape = MaterialShapes.Cookie12Sided,
+                title = stringResource(R.string.watched_apps),
+                subtitle = if (watchedCount == 0) stringResource(R.string.watched_apps_none)
+                else pluralStringResource(R.plurals.watched_apps_count, watchedCount, watchedCount),
+                shape = segmentShape(1, 3),
+                enabled = settings.autoAddNotices,
+                onClick = { showWatchedApps = true },
+            )
+            if (showWatchedApps) {
+                WatchedAppsDialog(viewModel, onDismiss = { showWatchedApps = false })
+            }
             SettingRow(
                 icon = Icons.Rounded.Widgets,
                 iconShape = MaterialShapes.Pentagon,
                 title = stringResource(R.string.widget_opens_entry),
                 subtitle = stringResource(R.string.widget_opens_entry_on),
-                shape = segmentShape(1, 2),
+                shape = segmentShape(2, 3),
                 checked = settings.widgetOpensEntry,
                 onCheckedChange = {
                     haptics.performHapticFeedback(

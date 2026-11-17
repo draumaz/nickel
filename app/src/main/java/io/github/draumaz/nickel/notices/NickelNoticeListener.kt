@@ -6,6 +6,7 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
@@ -59,7 +60,12 @@ class NickelNoticeListener : NotificationListenerService() {
 
         // Fresh repository per check: reads the saved toggle even if the process was
         // restarted under a different task than the settings screen.
-        if (!SettingsRepository(applicationContext).settings.value.autoAddNotices) return
+        val settings = SettingsRepository(applicationContext)
+        if (!settings.settings.value.autoAddNotices) return
+        // Only apps on the user's list. One the list has never met (installed while the
+        // listener was unbound, or never in the launcher) is weighed now, so a new bank's
+        // first alert isn't lost waiting for the user to open Settings.
+        if (!WatchedApps.consider(applicationContext, settings, sbn.packageName)) return
 
         // Keyed on content as well as the notification key: messaging apps reuse one key per
         // conversation, so a bank's second alert in the same thread would otherwise be
@@ -68,7 +74,7 @@ class NickelNoticeListener : NotificationListenerService() {
         val seen = seenKeys()
         if (fingerprint in seen) return
 
-        val appName = labelFor(sbn.packageName)
+        val appName = WatchedApps.labelFor(applicationContext, sbn.packageName)
         val match = NoticeParser.parse(sbn.packageName, appName, title, text, sbn.notification.channelId) ?: return
         remember(seen + fingerprint)
 
@@ -119,7 +125,32 @@ class NickelNoticeListener : NotificationListenerService() {
     private fun localized(label: String) =
         if (label == NoticeParser.SMS_SOURCE) getString(R.string.source_text_message) else label
 
+    private var installReceiver: WatchedApps.InstallReceiver? = null
+
+    /**
+     * Listens for installs only while bound, so a new financial app joins the list (and the
+     * user hears about it) as soon as it's installed rather than at its first alert.
+     */
+    override fun onListenerConnected() {
+        if (installReceiver != null) return
+        installReceiver = WatchedApps.InstallReceiver().also {
+            registerReceiver(
+                it,
+                IntentFilter(Intent.ACTION_PACKAGE_ADDED).apply { addDataScheme("package") },
+                RECEIVER_NOT_EXPORTED,
+            )
+        }
+    }
+
+    override fun onListenerDisconnected() = unregisterInstalls()
+
+    private fun unregisterInstalls() {
+        installReceiver?.let { runCatching { unregisterReceiver(it) } }
+        installReceiver = null
+    }
+
     override fun onDestroy() {
+        unregisterInstalls()
         scope.cancel()
         super.onDestroy()
     }
@@ -177,11 +208,6 @@ class NickelNoticeListener : NotificationListenerService() {
         getSharedPreferences("notices", Context.MODE_PRIVATE)
             .edit().putString(KEY_RECENT, NoticeTwins.encode(recent)).apply()
     }
-
-    private fun labelFor(packageName: String): String? = runCatching {
-        val info = packageManager.getApplicationInfo(packageName, PackageManager.ApplicationInfoFlags.of(0))
-        packageManager.getApplicationLabel(info).toString()
-    }.getOrNull()
 
     /**
      * Announces a captured transaction with a Delete button, because a parse is a guess:

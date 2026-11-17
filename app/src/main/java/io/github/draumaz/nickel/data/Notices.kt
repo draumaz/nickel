@@ -87,6 +87,9 @@ object NoticeParser {
      * so the channel itself is the direction. Gated on the channel rather than the package
      * because Wallet also posts offers and pass updates that can mention money.
      */
+    /** Whether [packageName] is a text-message app, where banks send their SMS alerts. */
+    fun isSmsPackage(packageName: String): Boolean = smsPackages.any(packageName::startsWith)
+
     private const val WALLET_PACKAGE = "com.google.android.apps.walletnfcrel"
     private const val WALLET_PURCHASE_CHANNEL = "tapandpay.transactions"
 
@@ -120,7 +123,7 @@ object NoticeParser {
             ?: return null
 
         val source = when {
-            smsPackages.any(packageName::startsWith) -> SMS_SOURCE
+            isSmsPackage(packageName) -> SMS_SOURCE
             !appName.isNullOrBlank() -> appName
             else -> packageName.substringAfterLast('.')
         }

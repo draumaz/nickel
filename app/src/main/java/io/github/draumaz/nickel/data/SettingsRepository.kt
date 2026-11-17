@@ -51,20 +51,29 @@ class SettingsRepository(context: Context) {
     })
     val backup: StateFlow<BackupSettings> = _backup.asStateFlow()
 
+    private val _noticeApps = MutableStateFlow(readNoticeApps())
     /**
-     * The backup worker writes its result through its own instance, so this one watches the
-     * shared preferences to show it. Held in a field: SharedPreferences keeps listeners
-     * only weakly, and a lambda passed straight in would be collected and fall silent.
+     * Packages whose notifications auto-add reads, or `null` before the list has been made
+     * (the first time the listener or the Settings screen meets this install).
      */
-    private val backupListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+    val noticeApps: StateFlow<Set<String>?> = _noticeApps.asStateFlow()
+
+    /**
+     * The backup worker and the notification listener write through their own instances, so
+     * this one watches the shared preferences to show what they wrote. Held in a field:
+     * SharedPreferences keeps listeners only weakly, and a lambda passed straight in would
+     * be collected and fall silent.
+     */
+    private val prefsListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
         if (key == null || key.startsWith(BACKUP_PREFIX)) _backup.value = readBackup()
+        if (key == null || key == KEY_NOTICE_APPS) _noticeApps.value = readNoticeApps()
     }
 
     // Constructing the repository applies the saved currency, so the app and the widget
     // format money the same way.
     init {
         Money.chosenCurrency = currencyOf(_settings.value.currencyCode)
-        prefs.registerOnSharedPreferenceChangeListener(backupListener)
+        prefs.registerOnSharedPreferenceChangeListener(prefsListener)
     }
 
     /**
@@ -137,6 +146,46 @@ class SettingsRepository(context: Context) {
         _settings.value = _settings.value.copy(autoAddNotices = enabled)
     }
 
+    /**
+     * Straight from the preferences rather than [noticeApps], which another instance's write
+     * reaches only once the change callback runs on the main thread. Copied: the set
+     * SharedPreferences hands back must not be modified or kept.
+     */
+    fun readNoticeApps(): Set<String>? = prefs.getStringSet(KEY_NOTICE_APPS, null)?.toSet()
+
+    /** Every package that has already been weighed for auto-joining, picked or not. */
+    fun knownNoticeApps(): Set<String> = prefs.getStringSet(KEY_NOTICE_APPS_KNOWN, null)?.toSet().orEmpty()
+
+    /**
+     * Makes the first list. [known] is everything installed at the time, so only apps
+     * installed later are weighed for joining automatically.
+     */
+    fun initNoticeApps(selected: Set<String>, known: Set<String>) {
+        prefs.edit()
+            .putStringSet(KEY_NOTICE_APPS, selected)
+            .putStringSet(KEY_NOTICE_APPS_KNOWN, known)
+            .commit()
+        _noticeApps.value = selected
+    }
+
+    /**
+     * Records that [packageName] has been weighed, adding it to the list if [select].
+     * Committed synchronously, so a second notification from the same new app, arriving
+     * before an apply would land, can't announce it twice.
+     */
+    fun markNoticeAppKnown(packageName: String, select: Boolean) {
+        val edit = prefs.edit().putStringSet(KEY_NOTICE_APPS_KNOWN, knownNoticeApps() + packageName)
+        if (select) edit.putStringSet(KEY_NOTICE_APPS, readNoticeApps().orEmpty() + packageName)
+        edit.commit()
+        _noticeApps.value = readNoticeApps()
+    }
+
+    /** Replaces the list outright, for the picker's own toggles and select all. */
+    fun setNoticeApps(packages: Set<String>) {
+        prefs.edit().putStringSet(KEY_NOTICE_APPS, packages).apply()
+        _noticeApps.value = packages
+    }
+
     fun setWidgetOpensEntry(enabled: Boolean) {
         prefs.edit().putBoolean(KEY_WIDGET_OPENS_ENTRY, enabled).apply()
         _settings.value = _settings.value.copy(widgetOpensEntry = enabled)
@@ -147,6 +196,8 @@ class SettingsRepository(context: Context) {
         const val KEY_CURRENCY = "currency"
         const val KEY_AUTO_ADD_NOTICES = "auto_add_notices"
         const val KEY_WIDGET_OPENS_ENTRY = "widget_opens_entry"
+        const val KEY_NOTICE_APPS = "notice_apps"
+        const val KEY_NOTICE_APPS_KNOWN = "notice_apps_known"
         const val BACKUP_PREFIX = "backup_"
         const val KEY_BACKUP_FOLDER = "backup_folder"
         const val KEY_BACKUP_FOLDER_NAME = "backup_folder_name"

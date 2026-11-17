@@ -81,6 +81,16 @@
     <string name="auto_add">Добавлять из уведомлений</string>
     <string name="auto_add_on">Находить суммы в уведомлениях банков и платёжных сервисов</string>
     <string name="auto_add_needs_access">Разрешите доступ к уведомлениям в настройках Android</string>
+    <string name="watched_apps">Отслеживаемые приложения</string>
+    <string name="watched_apps_none">Приложения не выбраны</string>
+    <plurals name="watched_apps_count">
+        <item quantity="one">Уведомления из %d приложения</item>
+        <item quantity="few">Уведомления из %d приложений</item>
+        <item quantity="many">Уведомления из %d приложений</item>
+        <item quantity="other">Уведомления из %d приложения</item>
+    </plurals>
+    <string name="watched_apps_dialog_body">Операции добавляются только из уведомлений этих приложений. Новые банковские и платёжные приложения добавляются автоматически — вы получите об этом уведомление.</string>
+    <string name="watched_apps_select_all">Выбрать все</string>
     <string name="widget_opens_entry">Новая запись из виджета</string>
     <string name="widget_opens_entry_on">Нажатие на виджет сразу открывает добавление операции</string>
     <string name="section_data">Ваши данные</string>
@@ -188,6 +198,10 @@
     <string name="channel_captured">Добавленные операции</string>
     <string name="channel_captured_description">Сообщает, когда операция из уведомления о платеже добавлена в журнал</string>
     <string name="transaction_added">Операция добавлена</string>
+    <string name="channel_watched_apps">Отслеживаемые приложения</string>
+    <string name="channel_watched_apps_description">Сообщает, когда новое финансовое приложение добавлено в список отслеживаемых</string>
+    <string name="app_now_watched">Теперь отслеживается %1$s</string>
+    <string name="app_now_watched_body">Платежи из его уведомлений будут добавляться автоматически. Это можно изменить в настройках.</string>
     <string name="source_text_message">SMS</string>
 
     <!-- Built-in categories -->

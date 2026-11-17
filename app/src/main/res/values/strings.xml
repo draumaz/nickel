@@ -83,6 +83,14 @@
     <string name="auto_add">Auto-add from notifications</string>
     <string name="auto_add_on">Watch payment and bank alerts for amounts</string>
     <string name="auto_add_needs_access">Allow notification access in Android settings</string>
+    <string name="watched_apps">Apps to watch</string>
+    <string name="watched_apps_none">No apps picked</string>
+    <plurals name="watched_apps_count">
+        <item quantity="one">Reading alerts from %d app</item>
+        <item quantity="other">Reading alerts from %d apps</item>
+    </plurals>
+    <string name="watched_apps_dialog_body">Only notifications from these apps can add transactions. New banking and payment apps are added automatically, and you’ll be told when one is.</string>
+    <string name="watched_apps_select_all">Select all</string>
     <string name="widget_opens_entry">Open a new entry from the widget</string>
     <string name="widget_opens_entry_on">Tapping a home-screen widget starts logging a transaction</string>
     <string name="section_data">Your data</string>
@@ -180,6 +188,10 @@
     <string name="channel_captured_description">Alerts when a payment notification is added to the ledger</string>
     <string name="transaction_added">Transaction added</string>
     <string name="source_text_message">Text message</string>
+    <string name="channel_watched_apps">Watched apps</string>
+    <string name="channel_watched_apps_description">Alerts when a newly installed financial app is added to the apps auto-add reads</string>
+    <string name="app_now_watched">Now watching %1$s</string>
+    <string name="app_now_watched_body">Its payment alerts will be added automatically. Change this in Settings.</string>
 
     <!-- Built-in categories. Display only: CSV export keeps the English labels. -->
     <string name="category_paycheck">Paycheck</string>

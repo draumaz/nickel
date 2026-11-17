@@ -21,6 +21,8 @@ import io.github.draumaz.nickel.data.SettingsRepository
 import io.github.draumaz.nickel.data.Transaction
 import io.github.draumaz.nickel.data.TransactionRepository
 import io.github.draumaz.nickel.export.ExportShare
+import io.github.draumaz.nickel.notices.InstalledApp
+import io.github.draumaz.nickel.notices.WatchedApps
 import io.github.draumaz.nickel.widget.updateNickelWidgets
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -95,6 +97,8 @@ class NickelViewModel(app: Application) : AndroidViewModel(app) {
 
     val settings: StateFlow<Settings> = settingsRepository.settings
     val backup: StateFlow<BackupSettings> = settingsRepository.backup
+    /** Packages auto-add listens to; `null` until the first list is made in [init]. */
+    val noticeApps: StateFlow<Set<String>?> = settingsRepository.noticeApps
 
     private val _backingUp = MutableStateFlow(false)
     /** A manual backup is being written. */
@@ -160,6 +164,9 @@ class NickelViewModel(app: Application) : AndroidViewModel(app) {
 
     init {
         viewModelScope.launch { repository.load() }
+        // Makes the first list of watched apps if the listener hasn't yet, so Settings can
+        // count it. Reads the installed apps, which is too slow for the main thread.
+        viewModelScope.launch(Dispatchers.IO) { WatchedApps.ensureList(getApplication(), settingsRepository) }
         // Redraw home-screen widgets whenever the ledger changes after the first load.
         viewModelScope.launch {
             repository.ledger.filterNotNull().drop(1).collect {
@@ -199,6 +206,12 @@ class NickelViewModel(app: Application) : AndroidViewModel(app) {
     fun setAutoAddNotices(enabled: Boolean) = settingsRepository.setAutoAddNotices(enabled)
 
     fun setWidgetOpensEntry(enabled: Boolean) = settingsRepository.setWidgetOpensEntry(enabled)
+
+    fun setNoticeApps(packages: Set<String>) = settingsRepository.setNoticeApps(packages)
+
+    /** Launcher apps for the picker, read off the main thread. */
+    suspend fun installedApps(): List<InstalledApp> =
+        withContext(Dispatchers.IO) { WatchedApps.installed(getApplication()) }
 
     fun setCurrency(code: String?) {
         settingsRepository.setCurrency(code)
