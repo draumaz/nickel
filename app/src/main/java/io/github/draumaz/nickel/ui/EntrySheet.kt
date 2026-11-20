@@ -43,7 +43,6 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -57,8 +56,6 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ButtonGroupDefaults
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButtonDefaults
@@ -322,7 +319,6 @@ val SlamSpin = spring<Float>(dampingRatio = 0.5f, stiffness = Spring.StiffnessMe
 /** How far a slam whips the shape round, in degrees. */
 const val SlamTurn = 300f
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EntrySheet(
     initialKind: Kind,
@@ -1019,7 +1015,6 @@ private fun BoxScope.KindSwipeHints(state: KindSwipeState, kind: Kind, gutter: D
     }
 }
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class, ExperimentalMaterial3Api::class)
 @Composable
 private fun EntryContent(
     initialKind: Kind,
@@ -1294,7 +1289,7 @@ private fun EntryContent(
                 },
                 placeholder = { Text(stringResource(R.string.add_note)) },
                 singleLine = true,
-                shape = RoundedCornerShape(20.dp),
+                shape = MaterialTheme.shapes.largeIncreased,
                 colors = TextFieldDefaults.colors(
                     focusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent,
                     unfocusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent,
@@ -1536,7 +1531,6 @@ private fun dayLabel(timestamp: Long): String {
     }
 }
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 internal fun CategoryChip(
     category: Category,
@@ -1595,7 +1589,7 @@ internal fun CategoryChip(
     Column(
         modifier
             .width(76.dp)
-            .clip(RoundedCornerShape(20.dp))
+            .clip(MaterialTheme.shapes.largeIncreased)
             .clickable(interaction, indication = androidx.compose.material3.ripple(), onClick = onClick)
             .padding(vertical = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally,

@@ -14,18 +14,15 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Save
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.ListItem
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialShapes
 import androidx.compose.material3.MaterialTheme
@@ -37,16 +34,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.draumaz.nickel.R
 import io.github.draumaz.nickel.data.BackupFiles
 import io.github.draumaz.nickel.data.BackupSettings
+import io.github.draumaz.nickel.ui.components.DialogListItem
 
 /**
  * The system folder picker, which already offers "New folder", opened on Documents so the
@@ -117,17 +113,15 @@ internal fun BackupIntervalDialog(
                 Column(Modifier.selectableGroup()) {
                     BackupFiles.INTERVALS_HOURS.forEach { hours ->
                         val selected = backup.intervalHours == hours
-                        Row(
-                            Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(16.dp))
-                                .selectable(selected, role = Role.RadioButton) { viewModel.setBackupInterval(hours) }
-                                .padding(horizontal = 4.dp, vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically,
+                        ListItem(
+                            selected = selected,
+                            onClick = { viewModel.setBackupInterval(hours) },
+                            leadingContent = { RadioButton(selected = selected, onClick = null) },
+                            colors = DialogListItem.colors(),
+                            contentPadding = DialogListItem.ContentPadding,
+                            modifier = Modifier.fillMaxWidth(),
                         ) {
-                            RadioButton(selected = selected, onClick = null)
-                            Spacer(Modifier.width(12.dp))
-                            Text(intervalLabel(hours), style = MaterialTheme.typography.bodyLarge)
+                            Text(intervalLabel(hours))
                         }
                     }
                 }

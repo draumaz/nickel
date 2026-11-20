@@ -1,6 +1,7 @@
 package io.github.draumaz.nickel
 
 import android.content.Intent
+import androidx.compose.material3.ComposeMaterial3Flags
 import io.github.draumaz.nickel.data.SettingsRepository
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -71,6 +72,9 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         if (savedInstanceState == null) addEntryPending = wantsNewEntry(intent)
+        // Material 3 ships Checkbox with its old M2 box size and marks unless this is on;
+        // it's global, so it's set once here before anything composes.
+        ComposeMaterial3Flags.isCheckboxStylingFixEnabled = true
         setContent {
             val viewModel: NickelViewModel = viewModel()
             val settings by viewModel.settings.collectAsStateWithLifecycle()

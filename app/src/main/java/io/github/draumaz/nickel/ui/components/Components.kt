@@ -3,6 +3,9 @@ package io.github.draumaz.nickel.ui.components
 import android.content.Context
 import android.content.res.Resources
 import android.text.format.DateFormat
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.material3.ListItemColors
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.ui.res.stringResource
 import io.github.draumaz.nickel.R
 import androidx.compose.animation.AnimatedContent
@@ -25,8 +28,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialShapes
 import androidx.compose.material3.MaterialTheme
@@ -65,7 +66,6 @@ import java.util.Locale
  * Text whose characters roll vertically like an odometer when they change. Characters are
  * keyed by their distance from the end so place values (ones, tens, cents...) keep identity.
  */
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun RollingText(
     text: String,
@@ -219,18 +219,7 @@ fun CategoryBadge(
     }
 }
 
-/**
- * Shape for an item in a segmented (grouped) list: generous outer corners on the ends of
- * the group, tight inner corners between neighbours.
- */
-fun segmentShape(index: Int, count: Int, outer: Dp = 24.dp, inner: Dp = 6.dp): RoundedCornerShape {
-    val top = if (index == 0) outer else inner
-    val bottom = if (index == count - 1) outer else inner
-    return RoundedCornerShape(topStart = top, topEnd = top, bottomStart = bottom, bottomEnd = bottom)
-}
-
 /** Springy squish while pressed. */
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun Modifier.pressScale(interactionSource: MutableInteractionSource, pressed: Float = 0.96f): Modifier {
     val isPressed by interactionSource.collectIsPressedAsState()
@@ -243,7 +232,6 @@ fun Modifier.pressScale(interactionSource: MutableInteractionSource, pressed: Fl
 }
 
 /** Characters that pop in with a bouncy scale as they are typed. */
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun PoppingText(
     text: String,
@@ -373,3 +361,19 @@ fun Category.displayLabel(resources: Resources): String =
 @Composable
 fun Category.displayLabel(): String =
     BuiltInLabels[id]?.let { stringResource(it) } ?: label
+
+/**
+ * Colours and padding for a [androidx.compose.material3.ListItem] used as a row inside a
+ * dialog: no container of its own (the dialog's surface shows through, and only the selected
+ * row gets the spec's tinted pill), and a tighter inset so the rows line up with the dialog's
+ * own text instead of sitting a full list inset in from it.
+ */
+object DialogListItem {
+    val ContentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp)
+
+    @Composable
+    fun colors(): ListItemColors = ListItemDefaults.colors(
+        containerColor = Color.Transparent,
+        disabledContainerColor = Color.Transparent,
+    )
+}

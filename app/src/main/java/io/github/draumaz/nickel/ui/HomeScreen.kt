@@ -1,7 +1,10 @@
 package io.github.draumaz.nickel.ui
 
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.key
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.platform.LocalLayoutDirection
 import kotlin.math.abs
@@ -64,7 +67,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.TrendingDown
 import androidx.compose.material.icons.automirrored.rounded.TrendingUp
@@ -79,8 +81,6 @@ import androidx.compose.material.icons.rounded.Savings
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.ButtonGroupDefaults
 import androidx.compose.material3.ContainedLoadingIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FabPosition
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialShapes
@@ -144,7 +144,6 @@ import io.github.draumaz.nickel.ui.components.RollingText
 import io.github.draumaz.nickel.ui.components.ScreenHeader
 import io.github.draumaz.nickel.ui.components.pressScale
 import io.github.draumaz.nickel.ui.components.rememberTimeFormatter
-import io.github.draumaz.nickel.ui.components.segmentShape
 import io.github.draumaz.nickel.ui.theme.NickelTheme
 import java.time.Instant
 import java.time.LocalDate
@@ -155,7 +154,6 @@ import kotlinx.coroutines.launch
 import androidx.compose.ui.geometry.isSpecified
 import androidx.compose.runtime.withFrameNanos
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun HomeScreen(
     viewModel: NickelViewModel,
@@ -439,7 +437,7 @@ private fun LazyListScope.transactionList(
         itemsIndexed(items, key = { _, t -> t.id }, contentType = { _, _ -> "txn" }) { index, t ->
             TransactionRow(
                 transaction = t,
-                shape = segmentShape(index, items.size),
+                shape = ListItemDefaults.segmentedShapes(index, items.size).shape,
                 badgeTurn = badgeTurn,
                 origin = rowOrigin,
                 isOrigin = t.id == originId,
@@ -448,7 +446,7 @@ private fun LazyListScope.transactionList(
                 onClone = { onClone(t) },
                 modifier = Modifier
                     .animateItem()
-                    .padding(bottom = 2.dp),
+                    .padding(bottom = ListItemDefaults.SegmentedGap),
             )
         }
     }
@@ -632,7 +630,6 @@ private fun CoinMark() {
     }
 }
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun HeroCard(totals: Totals, summary: FilterSummary?) {
     val money = NickelTheme.money
@@ -654,7 +651,7 @@ private fun HeroCard(totals: Totals, summary: FilterSummary?) {
     )
 
     Surface(
-        shape = RoundedCornerShape(36.dp),
+        shape = MaterialTheme.shapes.extraLargeIncreased,
         color = MaterialTheme.colorScheme.primaryContainer,
         modifier = Modifier
             .fillMaxWidth()
@@ -784,7 +781,7 @@ private fun StatPill(
     Row(
         modifier
             .glass(
-                shape = RoundedCornerShape(50),
+                shape = CircleShape,
                 tint = container.copy(alpha = StatPillTint),
                 fallback = container,
             )
@@ -807,7 +804,6 @@ private fun StatPill(
     }
 }
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun FilterRow(selected: Filter, onSelect: (Filter) -> Unit) {
     val options = listOf(
@@ -818,7 +814,8 @@ private fun FilterRow(selected: Filter, onSelect: (Filter) -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
-            .padding(top = 20.dp, bottom = 4.dp),
+            .padding(top = 20.dp, bottom = 4.dp)
+            .selectableGroup(),
         horizontalArrangement = Arrangement.spacedBy(ButtonGroupDefaults.ConnectedSpaceBetween),
     ) {
         options.forEachIndexed { index, (filter, label) ->
@@ -859,7 +856,6 @@ private fun FilterRow(selected: Filter, onSelect: (Filter) -> Unit) {
  * Categories within the income or expense filter, popping open under the filter bar.
  * Tapping a category filters to it; tapping it again clears the filter.
  */
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun CategoryFilterCarousel(
     categories: List<Category>,
@@ -924,11 +920,10 @@ private fun DayHeader(day: LocalDate, netCents: Long, modifier: Modifier = Modif
     }
 }
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun TransactionRow(
     transaction: Transaction,
-    shape: RoundedCornerShape,
+    shape: Shape,
     badgeTurn: State<Float>,
     /** Filled in with this row's badge when it's tapped, so the edit sheet grows out of it. */
     origin: ScallopOrigin,

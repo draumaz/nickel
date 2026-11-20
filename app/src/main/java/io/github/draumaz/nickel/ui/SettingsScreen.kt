@@ -1,16 +1,9 @@
 package io.github.draumaz.nickel.ui
 
-import io.github.draumaz.nickel.BuildConfig
-import io.github.draumaz.nickel.ui.components.GlassIconButton
-import io.github.draumaz.nickel.ui.components.localizedDateFormat
-import io.github.draumaz.nickel.ui.components.displayLabel
-import androidx.compose.ui.res.pluralStringResource
-import androidx.compose.ui.res.stringResource
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.provider.Settings
-import androidx.core.app.NotificationManagerCompat
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
@@ -25,11 +18,10 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -43,19 +35,18 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Apps
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.CurrencyExchange
-import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Folder
+import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Upload
@@ -63,10 +54,13 @@ import androidx.compose.material.icons.rounded.Widgets
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.ListItemDefaults
+import androidx.compose.material3.ListItemShapes
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialShapes
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SegmentedListItem
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
@@ -77,16 +71,17 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.toShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedback
@@ -94,7 +89,13 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.toggleableState
+import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLinkStyles
@@ -106,10 +107,12 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.core.app.NotificationManagerCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import io.github.draumaz.nickel.BuildConfig
 import io.github.draumaz.nickel.R
 import io.github.draumaz.nickel.data.ImportPlan
 import io.github.draumaz.nickel.data.Kind
@@ -117,9 +120,10 @@ import io.github.draumaz.nickel.data.Money
 import io.github.draumaz.nickel.export.ExportShare
 import io.github.draumaz.nickel.notices.NickelNoticeListener
 import io.github.draumaz.nickel.ui.components.CategoryBadge
+import io.github.draumaz.nickel.ui.components.GlassIconButton
 import io.github.draumaz.nickel.ui.components.ScreenHeader
-import io.github.draumaz.nickel.ui.components.pressScale
-import io.github.draumaz.nickel.ui.components.segmentShape
+import io.github.draumaz.nickel.ui.components.displayLabel
+import io.github.draumaz.nickel.ui.components.localizedDateFormat
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -187,7 +191,7 @@ fun SettingsScreen(viewModel: NickelViewModel, onBack: () -> Unit) {
                 iconShape = MaterialShapes.Cookie7Sided,
                 title = stringResource(R.string.dynamic_color),
                 subtitle = stringResource(R.string.dynamic_color_on),
-                shape = segmentShape(0, 2),
+                shapes = ListItemDefaults.segmentedShapes(0, 2),
                 checked = settings.dynamicColor,
                 onCheckedChange = {
                     haptics.performHapticFeedback(
@@ -196,7 +200,7 @@ fun SettingsScreen(viewModel: NickelViewModel, onBack: () -> Unit) {
                     viewModel.setDynamicColor(it)
                 },
             )
-            PaletteRow(shape = segmentShape(1, 2))
+            PaletteRow(shape = ListItemDefaults.segmentedShapes(1, 2).shape)
 
             SectionLabel(stringResource(R.string.section_money))
             SettingRow(
@@ -206,7 +210,7 @@ fun SettingsScreen(viewModel: NickelViewModel, onBack: () -> Unit) {
                 subtitle = settings.currencyCode
                     ?.let { runCatching { currencyLabel(Currency.getInstance(it)) }.getOrNull() }
                     ?: stringResource(R.string.system_default_currency, currencyLabel(Money.systemCurrency)),
-                shape = segmentShape(0, 1),
+                shapes = ListItemDefaults.segmentedShapes(0, 1),
                 onClick = { showCurrency = true },
             )
             if (showCurrency) {
@@ -222,7 +226,7 @@ fun SettingsScreen(viewModel: NickelViewModel, onBack: () -> Unit) {
             }
 
             SectionLabel(stringResource(R.string.section_automation))
-            NotificationAccessRow(viewModel, settings.autoAddNotices, haptics, shape = segmentShape(0, 3))
+            NotificationAccessRow(viewModel, settings.autoAddNotices, haptics, shapes = ListItemDefaults.segmentedShapes(0, 3))
             val watchedApps by viewModel.noticeApps.collectAsStateWithLifecycle()
             val watchedCount = watchedApps?.size ?: 0
             SettingRow(
@@ -231,7 +235,7 @@ fun SettingsScreen(viewModel: NickelViewModel, onBack: () -> Unit) {
                 title = stringResource(R.string.watched_apps),
                 subtitle = if (watchedCount == 0) stringResource(R.string.watched_apps_none)
                 else pluralStringResource(R.plurals.watched_apps_count, watchedCount, watchedCount),
-                shape = segmentShape(1, 3),
+                shapes = ListItemDefaults.segmentedShapes(1, 3),
                 enabled = settings.autoAddNotices,
                 onClick = { showWatchedApps = true },
             )
@@ -243,7 +247,7 @@ fun SettingsScreen(viewModel: NickelViewModel, onBack: () -> Unit) {
                 iconShape = MaterialShapes.Pentagon,
                 title = stringResource(R.string.widget_opens_entry),
                 subtitle = stringResource(R.string.widget_opens_entry_on),
-                shape = segmentShape(2, 3),
+                shapes = ListItemDefaults.segmentedShapes(2, 3),
                 checked = settings.widgetOpensEntry,
                 onCheckedChange = {
                     haptics.performHapticFeedback(
@@ -259,7 +263,7 @@ fun SettingsScreen(viewModel: NickelViewModel, onBack: () -> Unit) {
                 iconShape = MaterialShapes.Clover4Leaf,
                 title = stringResource(R.string.import_csv),
                 subtitle = stringResource(R.string.import_csv_subtitle),
-                shape = segmentShape(0, 4),
+                shapes = ListItemDefaults.segmentedShapes(0, 4),
                 onClick = {
                     importLauncher.launch(
                         arrayOf("text/*", "application/csv", "application/vnd.ms-excel", "application/octet-stream")
@@ -272,7 +276,7 @@ fun SettingsScreen(viewModel: NickelViewModel, onBack: () -> Unit) {
                 title = stringResource(R.string.export_csv),
                 subtitle = if (state.count == 0) stringResource(R.string.export_nothing)
                 else pluralStringResource(R.plurals.export_subtitle, state.count, state.count),
-                shape = segmentShape(1, 4),
+                shapes = ListItemDefaults.segmentedShapes(1, 4),
                 enabled = state.count > 0,
                 onClick = viewModel::export,
             )
@@ -281,7 +285,7 @@ fun SettingsScreen(viewModel: NickelViewModel, onBack: () -> Unit) {
                 iconShape = MaterialShapes.Cookie4Sided,
                 title = stringResource(R.string.backup_folder),
                 subtitle = backup.folderName ?: stringResource(R.string.backup_folder_unset),
-                shape = segmentShape(2, 4),
+                shapes = ListItemDefaults.segmentedShapes(2, 4),
                 onClick = pickBackupFolder,
             )
             SettingRow(
@@ -293,7 +297,7 @@ fun SettingsScreen(viewModel: NickelViewModel, onBack: () -> Unit) {
                     backup.intervalHours <= 0 -> stringResource(R.string.auto_backup_off)
                     else -> stringResource(R.string.dot_pair, intervalLabel(backup.intervalHours), lastBackupLabel(backup))
                 },
-                shape = segmentShape(3, 4),
+                shapes = ListItemDefaults.segmentedShapes(3, 4),
                 enabled = backup.folderUri != null,
                 onClick = { showBackupInterval = true },
             )
@@ -331,43 +335,41 @@ private fun SettingRow(
     iconShape: androidx.graphics.shapes.RoundedPolygon,
     title: String,
     subtitle: String,
-    shape: RoundedCornerShape,
+    shapes: ListItemShapes,
     enabled: Boolean = true,
     checked: Boolean? = null,
     onCheckedChange: (Boolean) -> Unit = {},
     onClick: () -> Unit = {},
 ) {
-    val interaction = remember { MutableInteractionSource() }
-    val rowModifier = if (checked != null) {
-        Modifier.toggleable(
-            value = checked,
-            enabled = enabled,
-            role = Role.Switch,
-            interactionSource = interaction,
-            indication = androidx.compose.material3.ripple(),
-            onValueChange = onCheckedChange,
-        )
+    // A switch row uses the click overload rather than the checked one: the checked overload
+    // announces itself as a checkbox and tints the whole row as "selected" while on, which
+    // reads as a multi-select list, not a setting. The switch semantics are added back here.
+    val switchSemantics = if (checked != null) {
+        Modifier.semantics {
+            role = Role.Switch
+            toggleableState = ToggleableState(checked)
+        }
     } else Modifier
-    Surface(
-        onClick = onClick,
-        enabled = enabled && checked == null,
-        shape = shape,
-        color = MaterialTheme.colorScheme.surfaceBright,
-        interactionSource = interaction,
+    SegmentedListItem(
+        onClick = if (checked != null) ({ onCheckedChange(!checked) }) else onClick,
+        shapes = shapes,
+        enabled = enabled,
+        // surfaceBright rather than the spec's surface: the screen sits on surfaceContainer,
+        // and plain surface barely separates from it in dark theme.
+        colors = ListItemDefaults.segmentedColors(
+            containerColor = MaterialTheme.colorScheme.surfaceBright,
+            disabledContainerColor = MaterialTheme.colorScheme.surfaceBright,
+        ),
         modifier = Modifier
             .fillMaxWidth()
-            .padding(bottom = 2.dp)
-            .pressScale(interaction, 0.98f),
-    ) {
-        Row(
-            rowModifier.padding(horizontal = 16.dp, vertical = 16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            val alpha = if (enabled) 1f else 0.38f
+            .padding(bottom = ListItemDefaults.SegmentedGap)
+            .then(switchSemantics),
+        leadingContent = {
+            // The badge paints its own colours, so it fades by hand to match the disabled text.
             Box(
                 Modifier
                     .size(44.dp)
-                    .graphicsLayer { this.alpha = alpha }
+                    .graphicsLayer { alpha = if (enabled) 1f else 0.38f }
                     .background(MaterialTheme.colorScheme.secondaryContainer, iconShape.toShape()),
                 contentAlignment = Alignment.Center,
             ) {
@@ -378,21 +380,10 @@ private fun SettingRow(
                     modifier = Modifier.size(22.dp),
                 )
             }
-            Spacer(Modifier.width(16.dp))
-            Column(
-                Modifier
-                    .weight(1f)
-                    .graphicsLayer { this.alpha = alpha }
-            ) {
-                Text(title, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
-                Text(
-                    subtitle,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            if (checked != null) {
-                Spacer(Modifier.width(12.dp))
+        },
+        supportingContent = { Text(subtitle) },
+        trailingContent = if (checked != null) {
+            {
                 Switch(
                     checked = checked,
                     onCheckedChange = null,
@@ -402,7 +393,9 @@ private fun SettingRow(
                     } else null,
                 )
             }
-        }
+        } else null,
+    ) {
+        Text(title)
     }
 }
 
@@ -416,7 +409,7 @@ private fun NotificationAccessRow(
     viewModel: NickelViewModel,
     autoAdd: Boolean,
     haptics: HapticFeedback,
-    shape: RoundedCornerShape,
+    shapes: ListItemShapes,
 ) {
     val context = LocalContext.current
     var hasAccess by remember { mutableStateOf(hasListenerAccess(context)) }
@@ -452,7 +445,7 @@ private fun NotificationAccessRow(
         iconShape = MaterialShapes.Cookie6Sided,
         title = stringResource(R.string.auto_add),
         subtitle = stringResource(if (hasAccess) R.string.auto_add_on else R.string.auto_add_needs_access),
-        shape = shape,
+        shapes = shapes,
         checked = autoAdd && hasAccess,
         onCheckedChange = { enabled ->
             haptics.performHapticFeedback(
@@ -492,7 +485,7 @@ private fun openNotificationAccess(context: Context) {
 
 /** Swatches of the live palette, so toggling dynamic color has something to watch. */
 @Composable
-private fun PaletteRow(shape: RoundedCornerShape) {
+private fun PaletteRow(shape: Shape) {
     val c = MaterialTheme.colorScheme
     val spin = rememberInfiniteTransition(label = "palette")
     val paletteTurn = spin.animateFloat(
@@ -505,7 +498,7 @@ private fun PaletteRow(shape: RoundedCornerShape) {
         color = c.surfaceBright,
         modifier = Modifier
             .fillMaxWidth()
-            .padding(bottom = 2.dp),
+            .padding(bottom = ListItemDefaults.SegmentedGap),
     ) {
         Row(
             Modifier.padding(horizontal = 16.dp, vertical = 16.dp),
@@ -624,7 +617,7 @@ private fun TransferDialogs(
             contentAlignment = Alignment.Center,
         ) {
             Surface(
-                shape = RoundedCornerShape(28.dp),
+                shape = MaterialTheme.shapes.extraLarge,
                 color = MaterialTheme.colorScheme.surfaceContainerHigh,
                 modifier = Modifier
                     .padding(horizontal = 40.dp)
