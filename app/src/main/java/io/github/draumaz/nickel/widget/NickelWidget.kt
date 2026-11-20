@@ -113,6 +113,12 @@ internal fun WidgetContent(
         NetOnly(label, netCents)
         return
     }
+    // Same for the empty message, which otherwise falls off the bottom of a one-row widget.
+    // The message stands in for the label there, since a bare zero would read as a stale total.
+    if (recent.isEmpty() && size.height.value < emptyHeight(compact)) {
+        NetOnly(emptyText, netCents)
+        return
+    }
 
     Column(
         modifier = GlanceModifier
@@ -140,6 +146,7 @@ internal fun WidgetContent(
             Spacer(GlanceModifier.height(6.dp))
             Text(
                 emptyText,
+                maxLines = 1,
                 style = TextStyle(color = GlanceTheme.colors.onSurfaceVariant, fontSize = 13.sp),
             )
         } else if (rows > 0) {
@@ -155,6 +162,18 @@ internal fun WidgetContent(
             }
         }
     }
+}
+
+/**
+ * Height in dp the empty layout needs: vertical padding, the label, the total and the message
+ * with its spacer. Text lines are taken at 1.4em, measured on a Pixel whose system font has
+ * tall line metrics (1.2em left the message clipped), and grow with the user's font scale.
+ */
+@Composable
+private fun emptyHeight(compact: Boolean): Float {
+    val fontScale = LocalContext.current.resources.configuration.fontScale
+    val textSp = 13f + (if (compact) 22f else 28f) + 13f
+    return 2 * 14f + 6f + textSp * 1.4f * fontScale
 }
 
 /**
@@ -187,6 +206,7 @@ private fun NetOnly(label: String, netCents: Long) {
     ) {
         Text(
             label,
+            maxLines = 1,
             style = TextStyle(color = GlanceTheme.colors.onSurfaceVariant, fontSize = labelSize.sp),
         )
         Text(
