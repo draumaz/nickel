@@ -191,8 +191,10 @@
     <!-- Widget -->
     <string name="widget_net">Итого</string>
     <string name="widget_empty">Операций пока нет</string>
+    <string name="widget_empty_short">Пока пусто</string>
     <string name="widget_today">Сегодня</string>
     <string name="widget_today_empty">Сегодня операций нет</string>
+    <string name="widget_today_empty_short">Сегодня пусто</string>
 
     <!-- Notification capture -->
     <string name="channel_captured">Добавленные операции</string>

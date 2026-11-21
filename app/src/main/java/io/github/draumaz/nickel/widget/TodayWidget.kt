@@ -35,6 +35,7 @@ class TodayWidget : GlanceAppWidget() {
                 WidgetContent(
                     label = context.getString(R.string.widget_today),
                     emptyText = context.getString(R.string.widget_today_empty),
+                    shortEmptyText = context.getString(R.string.widget_today_empty_short),
                     netCents = net,
                     recent = today.take(MAX_ROWS),
                     stamp = WidgetStamp.TIME,

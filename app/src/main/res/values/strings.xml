@@ -180,8 +180,10 @@
     <!-- Widget -->
     <string name="widget_net">Net</string>
     <string name="widget_empty">No transactions yet</string>
+    <string name="widget_empty_short">Nothing yet</string>
     <string name="widget_today">Today</string>
     <string name="widget_today_empty">Nothing logged today</string>
+    <string name="widget_today_empty_short">Nothing today</string>
 
     <!-- Notification capture -->
     <string name="channel_captured">Captured transactions</string>

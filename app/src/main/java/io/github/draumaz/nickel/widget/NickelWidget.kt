@@ -65,6 +65,7 @@ class NickelWidget : GlanceAppWidget() {
                 WidgetContent(
                     label = context.getString(R.string.widget_net),
                     emptyText = context.getString(R.string.widget_empty),
+                    shortEmptyText = context.getString(R.string.widget_empty_short),
                     netCents = net,
                     recent = recent,
                     stamp = WidgetStamp.DATE,
@@ -93,11 +94,15 @@ private val CompactWidth = 200.dp
 /**
  * The layout both widgets share: a labelled net total over as many recent rows as fit. Balance
  * and Today differ only in which transactions they're handed and what they call the total.
+ *
+ * [shortEmptyText] replaces [emptyText] on a one-row widget, where it sits in the label's single
+ * line: at the default 2x1 size the full sentence was ellipsized, notably in Russian.
  */
 @Composable
 internal fun WidgetContent(
     label: String,
     emptyText: String,
+    shortEmptyText: String,
     netCents: Long,
     recent: List<Transaction>,
     stamp: WidgetStamp,
@@ -116,7 +121,7 @@ internal fun WidgetContent(
     // Same for the empty message, which otherwise falls off the bottom of a one-row widget.
     // The message stands in for the label there, since a bare zero would read as a stale total.
     if (recent.isEmpty() && size.height.value < emptyHeight(compact)) {
-        NetOnly(emptyText, netCents)
+        NetOnly(shortEmptyText, netCents)
         return
     }
 
