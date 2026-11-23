@@ -180,9 +180,19 @@ class SettingsRepository(context: Context) {
         _noticeApps.value = readNoticeApps()
     }
 
-    /** Replaces the list outright, for the picker's own toggles and select all. */
+    /**
+     * Replaces the list outright, for the picker's own toggles and select all. Every app
+     * whose box changed is marked as weighed too: one that came in through select all (or
+     * was never met by the listener) and is then unticked would otherwise be weighed again
+     * at its next alert and, looking financial, put itself back on the list.
+     */
     fun setNoticeApps(packages: Set<String>) {
-        prefs.edit().putStringSet(KEY_NOTICE_APPS, packages).apply()
+        val previous = readNoticeApps().orEmpty()
+        val changed = (previous - packages) + (packages - previous)
+        prefs.edit()
+            .putStringSet(KEY_NOTICE_APPS, packages)
+            .putStringSet(KEY_NOTICE_APPS_KNOWN, knownNoticeApps() + changed)
+            .apply()
         _noticeApps.value = packages
     }
 

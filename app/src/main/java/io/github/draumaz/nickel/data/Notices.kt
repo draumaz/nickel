@@ -81,15 +81,15 @@ object NoticeParser {
         "com.textra", "com.klinker.android.send_message", "com.simplemobiletools.smsmessenger",
     )
 
+    /** Whether [packageName] is a text-message app, where banks send their SMS alerts. */
+    fun isSmsPackage(packageName: String): Boolean = smsPackages.any(packageName::startsWith)
+
     /**
      * Google Wallet's tap-to-pay receipts ("SAFEWAY #1551" / "$8.83 with Visa ••1234") carry
      * no direction word in any language, but everything on that channel is a card purchase,
      * so the channel itself is the direction. Gated on the channel rather than the package
      * because Wallet also posts offers and pass updates that can mention money.
      */
-    /** Whether [packageName] is a text-message app, where banks send their SMS alerts. */
-    fun isSmsPackage(packageName: String): Boolean = smsPackages.any(packageName::startsWith)
-
     private const val WALLET_PACKAGE = "com.google.android.apps.walletnfcrel"
     private const val WALLET_PURCHASE_CHANNEL = "tapandpay.transactions"
 
